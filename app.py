@@ -58,7 +58,9 @@ st_autorefresh(interval=60000, limit=None, key="live_refresh")
 # ==========================================
 # 2. البيانات والدوال الأساسية
 # ==========================================
+# 🌟 قاموس ضخم بأسماء الشركات (عشان الأسماء تظهر بدل الأرقام)
 COMPANY_NAMES = {
+    # أمريكي
     "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet", "AMZN": "Amazon", 
     "TSLA": "Tesla", "NVDA": "NVIDIA", "META": "Meta", "NFLX": "Netflix", 
     "AMD": "AMD", "INTC": "Intel", "JPM": "JPMorgan", "V": "Visa", "WMT": "Walmart", "DIS": "Disney",
@@ -67,14 +69,21 @@ COMPANY_NAMES = {
     "COST": "Costco", "NKE": "Nike", "SBUX": "Starbucks", "MCD": "McDonald's",
     "JNJ": "Johnson & Johnson", "UNH": "UnitedHealth", "PFE": "Pfizer", "LLY": "Eli Lilly",
     "XOM": "Exxon Mobil", "CVX": "Chevron", "BA": "Boeing", "PLTR": "Palantir",
+    
+    # 🌟 سعودي (تم إضافة العشرات من أهم الأسهم)
     "2222.SR": "أرامكو", "2010.SR": "سابك", "1120.SR": "الراجحي", "1180.SR": "الأهلي", 
     "2350.SR": "كيان", "1211.SR": "معادن", "4013.SR": "دله الصحية", "7010.SR": "الاتصالات",
     "4300.SR": "دار الأركان", "2280.SR": "المراعي", "7020.SR": "موبايلي", "7030.SR": "زين",
     "4014.SR": "علم", "1111.SR": "تداول", "4015.SR": "الدوائية", "4002.SR": "المواساة",
     "4004.SR": "الحبيب", "4161.SR": "بن داود", "4192.SR": "لجام", "7203.SR": "طيران ناس",
     "2082.SR": "أكوا باور", "6018.SR": "نادك", "4191.SR": "أم القرى", "8230.SR": "الراجحي للتأمين",
-    "1810.SR": "سهم 1810", "1322.SR": "سهم 1322", "4230.SR": "البحر الأحمر",
-    "9655.SR": "سهم 9655", "9641.SR": "سهم 9641", "9631.SR": "سهم 9631", "9628.SR": "سهم 9628", "9623.SR": "سهم 9623",
+    "1810.SR": "سيرا القابضة", "1322.SR": "أملاك العالمية", "4230.SR": "البحر الأحمر",
+    "4001.SR": "أسواق ع العثيم", "2050.SR": "صافولا", "2170.SR": "الأبحاث والإعلام",
+    "2310.SR": "سبكيم", "2380.SR": "بترو رابغ", "2060.SR": "التصنيع", "3020.SR": "أسمنت اليمامة",
+    "4030.SR": "البحري", "4200.SR": "الدريس", "4260.SR": "المواساة", "4342.SR": "جدوى ريت",
+    "4344.SR": "الرياض ريت", "8010.SR": "التعاونية", "8210.SR": "بوبا العربية", "8300.SR": "الوطنية",
+    
+    # مصري
     "COMI.CA": "البنك التجاري", "EFIH.CA": "إي فاينانس", "HRHO.CA": "هيرميس", "ETEL.CA": "المصرية للاتصالات", 
     "SWDY.CA": "السويدي", "EAST.CA": "الشرقية إيسترن", "TMGH.CA": "طلعت مصطفى", "ABUK.CA": "أبو قير", "SKPC.CA": "سيدي كرير", "ORAS.CA": "أوراسكوم",
 }
@@ -143,7 +152,6 @@ def fetch_news(ticker):
         return [n['title'] for n in news[:2]] if news else []
     except: return []
 
-# 🌟 دالة التقييم المطورة (بتشوف الاختراقات والسيولة)
 def calculate_multi_factor(df):
     if df.empty or len(df) < 50: 
         return 50, "بيانات غير كافية", "محايد", 0, 0, 0, "لا توجد بيانات كافية"
@@ -157,14 +165,12 @@ def calculate_multi_factor(df):
     current_price = close.iloc[-1]
     atr = (high - low).rolling(14).mean().iloc[-1]
 
-    # 1. الاتجاه العام
     try:
         sma20, sma50, sma200 = close.rolling(20).mean().iloc[-1], close.rolling(50).mean().iloc[-1], close.rolling(200).mean().iloc[-1] if len(close) >= 200 else close.rolling(50).mean().iloc[-1]
         if current_price > sma20 > sma50 > sma200: p_trend += 10; reasons.append("اتجاه صاعد قوي")
         elif current_price < sma20 < sma50 < sma200: p_trend -= 10; reasons.append("اتجاه هابط قوي")
     except: pass
 
-    # 2. الزخم
     try:
         delta = close.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
@@ -179,15 +185,13 @@ def calculate_multi_factor(df):
         else: p_mom -= 5; reasons.append("MACD سلبي")
     except: pass
 
-    # 🌟 3. الاختراق السعري (Breakout) - السر هنا
     try:
         recent_high = high.tail(20).max()
-        if current_price >= recent_high * 0.99: # لو قريب جداً من أعلى سعر أو كسره
+        if current_price >= recent_high * 0.99: 
             p_breakout = 20
             reasons.append("اختراق سعري قوي")
     except: pass
 
-    # 🌟 4. انفجار السيولة (Volume Spike)
     try:
         avg_vol = volume.rolling(20).mean().iloc[-1]
         if volume.iloc[-1] > avg_vol * 1.5:
@@ -276,6 +280,20 @@ def bulk_evaluate_tickers(tickers):
         except: pass
     return scores
 
+# 🌟 دالة لجلب اسم السهم لو مش موجود في القاموس
+@st.cache_data(ttl=86400)
+def get_ticker_name(ticker):
+    if ticker in COMPANY_NAMES:
+        return COMPANY_NAMES[ticker]
+    try:
+        info = yf.Ticker(ticker).info
+        name = info.get('shortName') or info.get('longName')
+        if name and name != ticker:
+            COMPANY_NAMES[ticker] = name # نحفظه عشان المرة الجاية
+            return name
+    except: pass
+    return ticker
+
 @st.cache_data(ttl=600)
 def get_options_recommendation(ticker, current_price, general_rec, atr):
     try:
@@ -346,7 +364,7 @@ with col_chart:
         
         def format_ticker(t):
             s = stock_scores_dict.get(t, 50)
-            name = COMPANY_NAMES.get(t, t)
+            name = get_ticker_name(t) # استخدام الدالة الجديدة لجلب الاسم
             if s >= 60: emoji = "🟢"
             elif s <= 40: emoji = "🔴"
             else: emoji = "🟡"
@@ -373,7 +391,7 @@ with col_chart:
         color = "#00c853" if change >= 0 else "#ff3d00"
         sign = "+" if change >= 0 else ""
         
-        company_name = COMPANY_NAMES.get(selected_ticker, selected_ticker)
+        company_name = get_ticker_name(selected_ticker)
         st.markdown(f"""
         <div class="top-bar">
             <span class="ticker-name">{company_name} · {selected_ticker} · {selected_timeframe}</span>
