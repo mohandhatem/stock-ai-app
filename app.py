@@ -7,6 +7,7 @@ import numpy as np
 from streamlit_autorefresh import st_autorefresh
 import datetime
 import time
+import requests
 
 # ==========================================
 # 1. إعدادات الصفحة والتصميم (متوافق مع الموبايل)
@@ -73,6 +74,7 @@ COMPANY_NAMES = {
     "4004.SR": "الحبيب", "4161.SR": "بن داود", "4192.SR": "لجام", "7203.SR": "طيران ناس",
     "2082.SR": "أكوا باور", "6018.SR": "نادك", "4191.SR": "أم القرى", "8230.SR": "الراجحي للتأمين",
     "1810.SR": "سهم 1810", "1322.SR": "سهم 1322", "4230.SR": "البحر الأحمر",
+    "9655.SR": "سهم 9655", "9641.SR": "سهم 9641", "9631.SR": "سهم 9631", "9628.SR": "سهم 9628", "9623.SR": "سهم 9623",
     "COMI.CA": "البنك التجاري", "EFIH.CA": "إي فاينانس", "HRHO.CA": "هيرميس", "ETEL.CA": "المصرية للاتصالات", 
     "SWDY.CA": "السويدي", "EAST.CA": "الشرقية إيسترن", "TMGH.CA": "طلعت مصطفى", "ABUK.CA": "أبو قير", "SKPC.CA": "سيدي كرير", "ORAS.CA": "أوراسكوم",
 }
@@ -83,19 +85,8 @@ MARKETS = {
     "🇪🇬 مصري (EGX)": "eg",
 }
 
-CURATED_TICKERS = {
-    "🇺🇸 أمريكي (US)": [
-        "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX", "AMD", "INTC", "JPM", "V", "WMT", "DIS",
-        "ORCL", "CRM", "ADBE", "AVGO", "QCOM", "BAC", "GS", "MA", "PYPL", "COST", "NKE", "SBUX", "MCD", 
-        "JNJ", "UNH", "PFE", "LLY", "XOM", "CVX", "BA", "PLTR"
-    ],
-    "🇸🇦 سعودي (Tadawul)": [
-        "2222.SR", "2010.SR", "1120.SR", "1180.SR", "2350.SR", "1211.SR", "4013.SR", "7010.SR", "4300.SR",
-        "2280.SR", "7020.SR", "7030.SR", "4014.SR", "1111.SR", "4015.SR", "4002.SR", "4004.SR", "4161.SR",
-        "4192.SR", "7203.SR", "2082.SR", "6018.SR", "4191.SR", "8230.SR"
-    ],
-    "🇪🇬 مصري (EGX)": ["COMI.CA", "EFIH.CA", "HRHO.CA", "ETEL.CA", "SWDY.CA", "EAST.CA", "TMGH.CA", "ABUK.CA", "SKPC.CA", "ORAS.CA"],
-}
+SA_TICKERS = [f"{i}.SR" for i in range(1000, 4500)]
+EG_TICKERS = ["COMI.CA", "EFIH.CA", "HRHO.CA", "ETEL.CA", "SWDY.CA", "EAST.CA", "TMGH.CA", "ABUK.CA", "SKPC.CA", "ORAS.CA"]
 
 INDICES = {
     "📈 S&P 500": "^GSPC", "📈 Dow Jones": "^DJI", "📈 NASDAQ": "^IXIC", 
@@ -152,6 +143,7 @@ def fetch_news(ticker):
         return [n['title'] for n in news[:2]] if news else []
     except: return []
 
+# 🌟 دالة التقييم المطورة (بتشوف الاختراقات والسيولة)
 def calculate_multi_factor(df):
     if df.empty or len(df) < 50: 
         return 50, "بيانات غير كافية", "محايد", 0, 0, 0, "لا توجد بيانات كافية"
@@ -159,27 +151,27 @@ def calculate_multi_factor(df):
     score = 50
     reasons = []
     p_trend, p_mom, p_vol, p_obv, p_candle = 0, 0, 0, 0, 0
+    p_breakout, p_vol_spike = 0, 0
     
     close, high, low, volume = df['Close'], df['High'], df['Low'], df['Volume']
     current_price = close.iloc[-1]
     atr = (high - low).rolling(14).mean().iloc[-1]
 
+    # 1. الاتجاه العام
     try:
         sma20, sma50, sma200 = close.rolling(20).mean().iloc[-1], close.rolling(50).mean().iloc[-1], close.rolling(200).mean().iloc[-1] if len(close) >= 200 else close.rolling(50).mean().iloc[-1]
-        if current_price > sma20 > sma50 > sma200: p_trend += 15; reasons.append("اتجاه صاعد قوي")
-        elif current_price < sma20 < sma50 < sma200: p_trend -= 15; reasons.append("اتجاه هابط قوي")
-        elif current_price > sma50: p_trend += 10; reasons.append("اتجاه صاعد")
-        elif current_price < sma50: p_trend -= 10; reasons.append("اتجاه هابط")
+        if current_price > sma20 > sma50 > sma200: p_trend += 10; reasons.append("اتجاه صاعد قوي")
+        elif current_price < sma20 < sma50 < sma200: p_trend -= 10; reasons.append("اتجاه هابط قوي")
     except: pass
 
+    # 2. الزخم
     try:
         delta = close.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rsi = 100 - (100 / (1 + (gain / loss))).iloc[-1]
-        if 60 <= rsi < 70: p_mom += 5; reasons.append("زخم إيجابي")
-        elif 30 < rsi <= 40: p_mom -= 5; reasons.append("زخم سلبي")
-        elif rsi <= 30: p_mom += 3; reasons.append("تشبع بيعي")
+        if 50 <= rsi < 70: p_mom += 5; reasons.append("زخم إيجابي")
+        elif rsi <= 30: p_mom += 5; reasons.append("تشبع بيعي")
         
         macd = close.ewm(span=12, adjust=False).mean() - close.ewm(span=26, adjust=False).mean()
         signal = macd.ewm(span=9, adjust=False).mean()
@@ -187,11 +179,20 @@ def calculate_multi_factor(df):
         else: p_mom -= 5; reasons.append("MACD سلبي")
     except: pass
 
+    # 🌟 3. الاختراق السعري (Breakout) - السر هنا
     try:
-        upper_band = close.rolling(20).mean() + (close.rolling(20).std() * 2)
-        lower_band = close.rolling(20).mean() - (close.rolling(20).std() * 2)
-        if current_price >= upper_band.iloc[-1]: p_vol -= 5; reasons.append("مقاومة بولينجر")
-        elif current_price <= lower_band.iloc[-1]: p_vol += 5; reasons.append("دعم بولينجر")
+        recent_high = high.tail(20).max()
+        if current_price >= recent_high * 0.99: # لو قريب جداً من أعلى سعر أو كسره
+            p_breakout = 20
+            reasons.append("اختراق سعري قوي")
+    except: pass
+
+    # 🌟 4. انفجار السيولة (Volume Spike)
+    try:
+        avg_vol = volume.rolling(20).mean().iloc[-1]
+        if volume.iloc[-1] > avg_vol * 1.5:
+            p_vol_spike = 15
+            reasons.append("سيولة عالية جداً")
     except: pass
 
     try:
@@ -200,18 +201,9 @@ def calculate_multi_factor(df):
         else: p_obv -= 5; reasons.append("تدفق أموال سلبي")
     except: pass
 
-    try:
-        last_open, last_close = df['Open'].iloc[-1], df['Close'].iloc[-1]
-        prev_open, prev_close = df['Open'].iloc[-2], df['Close'].iloc[-2]
-        if prev_close < prev_open and last_close > last_open and last_close > prev_open and last_open < prev_close:
-            p_candle += 10; reasons.append("ابتلاع صاعد")
-        elif prev_close > prev_open and last_close < last_open and last_close < prev_open and last_open > prev_close:
-            p_candle -= 10; reasons.append("ابتلاع هابط")
-    except: pass
-
-    score += (p_trend + p_mom + p_vol + p_obv + p_candle)
+    score += (p_trend + p_mom + p_vol + p_obv + p_candle + p_breakout + p_vol_spike)
     score = max(0, min(100, score))
-    breakdown_str = f"الاتجاه: {p_trend:+} | الزخم: {p_mom:+} | التقلب: {p_vol:+} | الفوليوم: {p_obv:+} | الشموع: {p_candle:+}"
+    breakdown_str = f"اختراق: {p_breakout:+} | سيولة: {p_vol_spike:+} | اتجاه: {p_trend:+} | زخم: {p_mom:+} | تدفق: {p_obv:+}"
     
     if score >= 60:
         rec = "شراء (BUY)"
@@ -236,12 +228,35 @@ def get_multi_factor_score(ticker):
     df = fetch_data(ticker, "1d", "1y")
     return calculate_multi_factor(df)
 
+@st.cache_data(ttl=86400)
+def auto_fetch_tickers(market_code):
+    tickers = []
+    try:
+        q = yf.EquityQuery('eq', ['region', market_code])
+        res = yf.screen(q, size=300)
+        tickers = [item['symbol'] for item in res.get('quotes', [])]
+    except: pass
+    
+    if not tickers:
+        if market_code == 'us':
+            try:
+                url = "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv"
+                res = requests.get(url)
+                df = pd.read_csv(pd.compat.StringIO(res.text))
+                tickers = df['Symbol'].tolist()
+            except:
+                tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX"]
+        elif market_code == 'sa':
+            tickers = SA_TICKERS[:300] 
+        elif market_code == 'eg':
+            tickers = EG_TICKERS
+
+    return list(set(tickers))
+
 @st.cache_data(ttl=600)
 def bulk_evaluate_tickers(tickers):
     if not tickers: return {}
-    
     scores = {}
-    # تقسيم القائمة لمجموعات عشان نتجنب الـ Timeout
     chunk_size = 20
     for i in range(0, len(tickers), chunk_size):
         chunk = tickers[i:i+chunk_size]
@@ -257,10 +272,8 @@ def bulk_evaluate_tickers(tickers):
                     if len(df) < 50: continue
                     score, _, _, _, _, _, _ = calculate_multi_factor(df)
                     scores[t] = score
-                except:
-                    pass
-        except:
-            pass
+                except: pass
+        except: pass
     return scores
 
 @st.cache_data(ttl=600)
@@ -268,7 +281,6 @@ def get_options_recommendation(ticker, current_price, general_rec, atr):
     try:
         stock = yf.Ticker(ticker)
         expirations = stock.options
-        
         if expirations:
             chain = None
             target_exp = None
@@ -279,8 +291,7 @@ def get_options_recommendation(ticker, current_price, general_rec, atr):
                         chain = temp_chain
                         target_exp = exp
                         break
-                except:
-                    continue
+                except: continue
                     
             if chain is not None:
                 calls, puts = chain.calls, chain.puts
@@ -314,13 +325,11 @@ def get_options_recommendation(ticker, current_price, general_rec, atr):
 col_chart, col_sidebar = st.columns([2.5, 1], gap="medium")
 
 with col_chart:
-    c1, c2, c3 = st.columns([1.5, 1, 1])
+    c1, c2 = st.columns([2, 1])
     with c1:
         market_options = list(MARKETS.keys()) + ["📊 المؤشرات (Indices)"]
         selected_market = st.selectbox("السوق", market_options, index=0, label_visibility="collapsed")
     with c2:
-        scope = st.selectbox("النطاق", ["أهم الأسهم 🔥", "مخصص (Custom) 🎯"], label_visibility="collapsed")
-    with c3:
         selected_timeframe = st.selectbox("الإطار", list(TIMEFRAMES.keys()), index=1, label_visibility="collapsed")
     
     if selected_market == "📊 المؤشرات (Indices)":
@@ -328,16 +337,10 @@ with col_chart:
         selected_ticker_display = st.selectbox("المؤشر", ticker_options, index=0, label_visibility="collapsed")
         selected_ticker = INDICES[selected_ticker_display]
     else:
-        if scope == "مخصص (Custom) 🎯":
-            # إضافة مربع نص عشان المستخدم يكتب فيه الرموز اللي هو عايزها
-            custom_str = st.text_input("اكتب رموز الأسهم مفصولة بفاصلة (مثال: 1810.SR, 1322.SR, 4230.SR):", value="1810.SR, 1322.SR, 4230.SR")
-            tickers_to_eval = [t.strip() for t in custom_str.split(",") if t.strip()]
-            with st.spinner("جاري تقييم الأسهم المخصصة..."):
-                stock_scores_dict = bulk_evaluate_tickers(tickers_to_eval)
-        else:
-            with st.spinner("جاري تقييم الأسهم المهمة..."):
-                tickers_to_eval = CURATED_TICKERS[selected_market]
-                stock_scores_dict = bulk_evaluate_tickers(tickers_to_eval)
+        market_code = MARKETS[selected_market]
+        with st.spinner("جاري جلب وتحليل كل أسهم السوق تلقائياً..."):
+            all_tickers = auto_fetch_tickers(market_code)
+            stock_scores_dict = bulk_evaluate_tickers(all_tickers)
                 
         sorted_tickers = sorted(stock_scores_dict.keys(), key=lambda x: stock_scores_dict.get(x, 0), reverse=True)
         
