@@ -64,12 +64,21 @@ COMPANY_NAMES = {
 }
 
 MARKETS = {"🇸🇦 سعودي (Tadawul)": SAUDI_TICKERS, "🇺🇸 أمريكي (US)": US_TICKERS, "🇪🇬 مصري (EGX)": EGYPT_TICKERS}
-TIMEFRAMES = {"5m": {"interval": "5m", "period": "60d"}, "15m": {"interval": "15m", "period": "60d"}, "1h": {"interval": "60m", "period": "730d"}, "1d": {"interval": "1d", "period": "5y"}}
+
+# تحديث الفريمات
+TIMEFRAMES = {
+    "1m": {"interval": "1m", "period": "7d"},
+    "5m": {"interval": "5m", "period": "60d"},
+    "15m": {"interval": "15m", "period": "60d"},
+    "30m": {"interval": "30m", "period": "60d"},
+    "1h": {"interval": "60m", "period": "730d"},
+    "1d": {"interval": "1d", "period": "5y"}
+}
 
 # ==========================================
-# 3. دوال التحليل (إيجابي وسلبي)
+# 3. دوال التحليل
 # ==========================================
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60) # قللنا الكاش لـ دقيقة عشان البيانات تتحدث أسرع
 def fetch_data(ticker, interval, period):
     try:
         df = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
@@ -93,12 +102,10 @@ def analyze_stock(df, ticker):
     prev_close = close.iloc[-2]
     atr = (high - low).rolling(14).mean().iloc[-1]
 
-    # المتوسطات
     sma20 = close.rolling(20).mean().iloc[-1]
     sma30 = close.rolling(30).mean().iloc[-1]
     sma50 = close.rolling(50).mean().iloc[-1]
     
-    # 🌟 الشروط الجديدة: إيجابي (فوق) وسلبي (تحت)
     is_above_mas = (current_price > sma20) and (sma20 > sma30) and (sma30 > sma50)
     is_below_mas = (current_price < sma20) and (sma20 < sma30) and (sma30 < sma50)
 
@@ -112,7 +119,6 @@ def analyze_stock(df, ticker):
         score -= 20
         breakdown.append("تحت متوسط 20/30/50: -20")
 
-    # مؤشرات الزخم
     delta = close.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -150,7 +156,6 @@ def analyze_stock(df, ticker):
     score = max(10, min(95, score))
     breakdown.append(f"<b>الإجمالي: {score}%</b>")
     
-    # التوصيات (شراء للصاعد، بيع للهابط)
     if score >= 70 and is_above_mas:
         rec = "شراء قوي (STRONG BUY)"
         intraday_target = current_price + (atr * 1.0)
@@ -193,12 +198,11 @@ def evaluate_tickers(tickers):
     return results
 
 # ==========================================
-# 4. واجهة المستخدم (إضافة الفلتر)
+# 4. واجهة المستخدم
 # ==========================================
 col_chart, col_sidebar = st.columns([2.5, 1], gap="medium")
 
 with col_chart:
-    # 🌟 إضافة اختيار الفلتر (إيجابي / سلبي / الكل)
     c1, c2, c3 = st.columns([1.5, 1.5, 1])
     with c1:
         market_options = list(MARKETS.keys())
@@ -206,14 +210,13 @@ with col_chart:
     with c2:
         filter_mode = st.selectbox("الفلتر", ["الكل ⚖️", "إيجابي (فوق المتوسطات) 🚀", "سلبي (تحت المتوسطات) 🔻"], label_visibility="collapsed")
     with c3:
-        selected_timeframe = st.selectbox("الإطار", list(TIMEFRAMES.keys()), index=3, label_visibility="collapsed")
+        selected_timeframe = st.selectbox("الإطار", list(TIMEFRAMES.keys()), index=0, label_visibility="collapsed")
 
     tickers_list = MARKETS[selected_market]
     
     with st.spinner("جاري فلترة وتحليل الأسهم..."):
         eval_data = evaluate_tickers(tickers_list)
 
-    # تطبيق الفلتر
     if filter_mode == "إيجابي (فوق المتوسطات) 🚀":
         filtered_tickers = [t for t, data in eval_data.items() if data['is_above_mas']]
     elif filter_mode == "سلبي (تحت المتوسطات) 🔻":
@@ -221,7 +224,6 @@ with col_chart:
     else:
         filtered_tickers = list(eval_data.keys())
 
-    # الترتيب حسب التقييم
     filtered_tickers = sorted(filtered_tickers, key=lambda x: eval_data[x]['score'], reverse=True)
 
     if not filtered_tickers:
@@ -239,7 +241,10 @@ with col_chart:
 
     # --- رسم الشارت ---
     tf_config = TIMEFRAMES[selected_timeframe]
-    df = fetch_data(selected_ticker, tf_config["interval"], tf_config["period"])
+    
+    # 🌟 هنا التحديث الفوري: كل ما تغير الفريم، بيجيب الداتا من جديد ويظهر Spinner
+    with st.spinner(f"جاري تحديث بيانات {selected_ticker} لفريم {selected_timeframe}..."):
+        df = fetch_data(selected_ticker, tf_config["interval"], tf_config["period"])
 
     if not df.empty:
         current_price = df['Close'].iloc[-1].item()
@@ -285,7 +290,7 @@ with col_sidebar:
 
         st.markdown(f"""
         <div class="side-card live-card" style="border-left-color: {score_color};">
-        <div class="card-title">🧠 محرك التحليل</div>
+        <div class="card-title">🧠 محرك التحليل ({selected_timeframe})</div>
         <div class="score-badge" style="background-color: {score_color}20; color: {score_color}; border: 1px solid {score_color};">
             درجة الثقة: {score}%
         </div>
@@ -308,7 +313,6 @@ with col_sidebar:
         </div>
         """, unsafe_allow_html=True)
 
-        # توصية العقود (للأسهم الأمريكية فقط)
         if selected_ticker.isalpha():
             try:
                 stock = yf.Ticker(selected_ticker)
@@ -335,7 +339,6 @@ with col_sidebar:
             except:
                 pass
 
-        # الأخبار
         news = fetch_news(selected_ticker)
         news_html = "".join([f"<div class='news-item'>• {n}</div>" for n in news]) if news else "<div class='news-item'>لا توجد أخبار حديثة.</div>"
         st.markdown(f"""
