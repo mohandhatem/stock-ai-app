@@ -77,17 +77,9 @@ COMPANY_NAMES = {
 }
 
 MARKETS = {
-    "🇺🇸 أمريكي (US)": [
-        "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX", "AMD", "INTC", "JPM", "V", "WMT", "DIS",
-        "ORCL", "CRM", "ADBE", "AVGO", "QCOM", "BAC", "GS", "MA", "PYPL", "COST", "NKE", "SBUX", "MCD", 
-        "JNJ", "UNH", "PFE", "LLY", "XOM", "CVX", "BA", "PLTR"
-    ],
-    "🇸🇦 سعودي (Tadawul)": [
-        "2222.SR", "2010.SR", "1120.SR", "1180.SR", "2350.SR", "1211.SR", "4013.SR", "7010.SR", "4300.SR",
-        "2280.SR", "7020.SR", "7030.SR", "4014.SR", "1111.SR", "4015.SR", "4002.SR", "4004.SR", "4161.SR",
-        "4192.SR", "7203.SR", "2082.SR", "6018.SR", "4191.SR", "8230.SR"
-    ],
-    "🇪🇬 مصري (EGX)": ["COMI.CA", "EFIH.CA", "HRHO.CA", "ETEL.CA", "SWDY.CA", "EAST.CA", "TMGH.CA", "ABUK.CA", "SKPC.CA", "ORAS.CA"],
+    "🇺🇸 أمريكي (US)": "us",
+    "🇸🇦 سعودي (Tadawul)": "sa",
+    "🇪🇬 مصري (EGX)": "eg",
 }
 
 INDICES = {
@@ -226,7 +218,6 @@ def get_multi_factor_score(ticker):
 
     return score, rec, " | ".join(reasons[:2]), intraday_target, swing_target, stop_loss, breakdown_str
 
-# 🌟 الحل الذكي: لو ياهو رفض، بنعمل عقد تقديري
 @st.cache_data(ttl=600)
 def get_options_recommendation(ticker, current_price, general_rec, atr):
     try:
@@ -260,9 +251,7 @@ def get_options_recommendation(ticker, current_price, general_rec, atr):
                     }
     except: pass
     
-    # 🌟 توليد عقد تقديري لو ياهو فشل
     est_exp = (datetime.date.today() + datetime.timedelta(days=30)).strftime("%Y-%m-%d")
-    # سعر العقد التقديري بيعتمد على التقلب (ATR) بنسبة 2%
     est_price = round(current_price * 0.02, 2)
     est_strike = round(current_price * 1.02, 2) if "شراء" in general_rec else round(current_price * 0.98, 2)
     
@@ -279,7 +268,6 @@ def get_options_recommendation(ticker, current_price, general_rec, atr):
 # ==========================================
 col_chart, col_sidebar = st.columns([2.5, 1], gap="medium")
 
-# --- الشارت الرئيسي ---
 with col_chart:
     market_options = list(MARKETS.keys()) + ["📊 المؤشرات (Indices)"]
     selected_market = st.selectbox("السوق", market_options, index=0, label_visibility="collapsed")
@@ -289,19 +277,37 @@ with col_chart:
         selected_ticker_display = st.selectbox("المؤشر", ticker_options, index=0, label_visibility="collapsed")
         selected_ticker = INDICES[selected_ticker_display]
     else:
-        ticker_symbols = MARKETS[selected_market]
+        # جلب جميع الأسهم ديناميكياً
+        region_code = MARKETS[selected_market]
+        
+        @st.cache_data(ttl=3600)
+        def get_all_tickers(region):
+            try:
+                q = yf.EquityQuery('eq', ['region', region])
+                res = yf.screen(q)
+                return [item['symbol'] for item in res.get('quotes', [])]
+            except:
+                return []
+                
+        with st.spinner("جاري جلب جميع أسهم السوق..."):
+            all_tickers = get_all_tickers(region_code)
+            
+        if not all_tickers:
+            st.error("تعذر جلب قائمة الأسهم، جرب تحديث الصفحة.")
+            st.stop()
+            
         stock_scores_dict = {}
-        with st.spinner("جاري تقييم الأسهم..."):
-            for t in ticker_symbols:
+        with st.spinner(f"جاري تقييم {len(all_tickers)} سهم..."):
+            for t in all_tickers:
                 time.sleep(0.05) 
                 s, _, _, _, _, _, _ = get_multi_factor_score(t)
                 stock_scores_dict[t] = s
         
-        sorted_tickers = sorted(ticker_symbols, key=lambda x: stock_scores_dict.get(x, 0), reverse=True)
+        sorted_tickers = sorted(all_tickers, key=lambda x: stock_scores_dict.get(x, 0), reverse=True)
         
         def format_ticker(t):
             s = stock_scores_dict.get(t, 50)
-            name = COMPANY_NAMES.get(t, t)
+            name = COMPANY_NAMES.get(t, t) # لو مش موجود في القاموس، هيظهر الرمز نفسه
             if s >= 60: emoji = "🟢"
             elif s <= 40: emoji = "🔴"
             else: emoji = "🟡"
@@ -325,7 +331,6 @@ with col_chart:
         change = current_price - prev_close
         change_pct = (change / prev_close) * 100
         
-        # حساب ATR لاستخدامه في العقد التقديري
         atr = (df['High'] - df['Low']).rolling(14).mean().iloc[-1]
 
         color = "#00c853" if change >= 0 else "#ff3d00"
@@ -368,7 +373,6 @@ with col_chart:
 
         st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
 
-# --- القائمة اليمين (التوصيات) ---
 with col_sidebar:
     if not df.empty:
         ext_price = fetch_extended_hours(selected_ticker)
@@ -407,7 +411,6 @@ with col_sidebar:
         </div>
         """, unsafe_allow_html=True)
 
-        # تمرير الـ ATR للدالة عشان تحسب العقد التقديري
         options_rec = get_options_recommendation(selected_ticker, current_price, recommendation, atr)
         
         if options_rec:
