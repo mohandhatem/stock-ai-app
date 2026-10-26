@@ -9,34 +9,7 @@ import datetime
 import time
 
 # ==========================================
-# 1. إعدادات Webull API
-# ==========================================
-try:
-    from webull.data.common.category import Category
-    from webull.data.common.timespan import Timespan
-    from webull.core.client import ApiClient
-    from webull.data.data_client import DataClient
-    WEBULL_AVAILABLE = True
-except ImportError:
-    WEBULL_AVAILABLE = False
-
-# 🌟 ضع مفاتيح Webull هنا
-WEBULL_APP_KEY = "YOUR_APP_KEY"
-WEBULL_APP_SECRET = "YOUR_APP_SECRET"
-WEBULL_REGION = "us"
-WEBULL_API_ENDPOINT = "api.webull.com"
-
-webull_data_client = None
-if WEBULL_AVAILABLE and WEBULL_APP_KEY != "YOUR_APP_KEY":
-    try:
-        api_client = ApiClient(WEBULL_APP_KEY, WEBULL_APP_SECRET, WEBULL_REGION)
-        api_client.add_endpoint(WEBULL_REGION, WEBULL_API_ENDPOINT)
-        webull_data_client = DataClient(api_client)
-    except Exception as e:
-        st.error(f"خطأ في تهيئة Webull: {e}")
-
-# ==========================================
-# 2. إعدادات الصفحة والتصميم
+# 1. إعدادات الصفحة والتصميم
 # ==========================================
 st.set_page_config(page_title="Pro Trading Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
@@ -61,14 +34,12 @@ footer {visibility: hidden;}
 .general-card { border-left: 4px solid #00c853; }
 .card-title { color: #d1d4dc; font-size: 13px; font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #2a2e39; padding-bottom: 5px;}
 .price-text { font-size: 20px; font-weight: bold; margin: 0; }
-.pre-market-text { font-size: 12px; color: #ff9800; font-weight: bold; margin: 0; margin-top: 2px;}
 .change-text { font-size: 12px; margin: 0; margin-bottom: 8px;}
 .rec-item { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px;}
 .rec-label { color: #888; }
 .news-item { font-size: 11px; margin-bottom: 6px; color: #d1d4dc; line-height: 1.4;}
 .score-badge { font-size: 22px; font-weight: bold; padding: 8px; border-radius: 8px; text-align: center; margin-bottom: 8px;}
-.breakdown-text { font-size: 9px; color: #6c757d; text-align: center; margin-top: 5px; line-height: 1.5; border-top: 1px dashed #2a2e39; padding-top: 5px;}
-.estimate-warning { font-size: 10px; color: #ff9800; text-align: center; margin-bottom: 5px; font-style: italic;}
+.breakdown-text { font-size: 10px; color: #9ca3af; text-align: center; margin-top: 5px; line-height: 1.6; border-top: 1px dashed #2a2e39; padding-top: 8px; text-align: right;}
 
 @media (max-width: 768px) {
     .block-container { padding: 0rem !important; }
@@ -82,7 +53,7 @@ footer {visibility: hidden;}
 st_autorefresh(interval=60000, limit=None, key="live_refresh")
 
 # ==========================================
-# 3. البيانات والقوائم
+# 2. البيانات والقوائم
 # ==========================================
 SAUDI_TICKERS = [
     "2222.SR", "2010.SR", "1120.SR", "1180.SR", "2350.SR", "1211.SR", "4013.SR", "7010.SR", "4300.SR",
@@ -151,39 +122,15 @@ TIMEFRAMES = {
 }
 
 # ==========================================
-# 4. دوال جلب البيانات (Webull + yfinance)
+# 3. دوال جلب البيانات
 # ==========================================
 @st.cache_data(ttl=60)
 def fetch_data(ticker, interval, period):
-    is_us_stock = ticker.isalpha() or (not ticker.endswith("=X") and ".SR" not in ticker and ".CA" not in ticker)
-    
-    if is_us_stock and webull_data_client is not None:
-        try:
-            timespan_map = {
-                "1m": Timespan.M1.name, "5m": Timespan.M5.name, "15m": Timespan.M15.name,
-                "30m": Timespan.M30.name, "1h": Timespan.H1.name, "1d": Timespan.D1.name,
-                "1wk": Timespan.W1.name, "1mo": Timespan.MO1.name
-            }
-            webull_timespan = timespan_map.get(interval, Timespan.D1.name)
-            
-            res = webull_data_client.market_data.get_history_bar(ticker, Category.US_STOCK.name, webull_timespan)
-            if res.status_code == 200:
-                data = res.json()
-                if 'data' in data and len(data['data']) > 0:
-                    df = pd.DataFrame(data['data'])
-                    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-                    df.set_index('timestamp', inplace=True)
-                    df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True)
-                    return df
-        except Exception as e:
-            print(f"Webull error for {ticker}: {e}. Falling back to yfinance.")
-    
     try:
         df = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
         return df
-    except:
-        return pd.DataFrame()
+    except: return pd.DataFrame()
 
 @st.cache_data(ttl=60)
 def fetch_extended_hours(ticker):
@@ -216,65 +163,117 @@ def fetch_news(ticker):
         return [n['title'] for n in news[:2]] if news else []
     except: return []
 
-def calculate_multi_factor(df):
+# ==========================================
+# 4. محرك التحليل الخارق (Confluence Engine)
+# ==========================================
+def calculate_advanced_confluence(df):
     if df.empty or len(df) < 50: 
         return 50, "بيانات غير كافية", "محايد", 0, 0, 0, False, "لا توجد بيانات كافية"
 
     score = 50
-    reasons = []
-    p_trend, p_mom, p_breakout, p_vol_spike, p_explosion = 0, 0, 0, 0, 0
+    breakdown = []
     
     close, open_p, high, low, volume = df['Close'], df['Open'], df['High'], df['Low'], df['Volume']
     current_price = close.iloc[-1]
     prev_close = close.iloc[-2]
     atr = (high - low).rolling(14).mean().iloc[-1]
 
+    # 1. محور الاتجاه (Trend)
     sma20 = close.rolling(20).mean().iloc[-1]
-    sma30 = close.rolling(30).mean().iloc[-1]
     sma50 = close.rolling(50).mean().iloc[-1]
+    sma200 = close.rolling(200).mean().iloc[-1] if len(close) >= 200 else sma50
+    ema9 = close.ewm(span=9, adjust=False).mean().iloc[-1]
+    ema21 = close.ewm(span=21, adjust=False).mean().iloc[-1]
     
-    is_above_smas = (current_price > sma20) and (sma20 > sma30) and (sma30 > sma50)
+    is_above_smas = (current_price > sma20 > sma50 > sma200)
     if is_above_smas:
-        p_trend = 15
-        reasons.append("فوق متوسط 20 و 30 و 50")
+        score += 15
+        breakdown.append("اتجاه صاعد (فوق المتوسطات)")
+    elif current_price < sma20 < sma50:
+        score -= 15
+        breakdown.append("اتجاه هابط (تحت المتوسطات)")
+        
+    if ema9 > ema21:
+        score += 5
+        breakdown.append("تقاطع EMA إيجابي")
+    else:
+        score -= 5
 
-    daily_change_pct = ((current_price - prev_close) / prev_close) * 100
-    if daily_change_pct >= 5.0:
-        p_explosion = 40
-        reasons.append(f"انفجار سعري (+{daily_change_pct:.1f}%)")
+    # 2. محور الزخم (Momentum)
+    delta = close.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rsi = 100 - (100 / (1 + (gain / loss))).iloc[-1]
     
-    try:
-        recent_high = high.tail(20).max()
-        if current_price >= recent_high * 0.99: 
-            p_breakout = 20
-            reasons.append("اختراق سعري")
-    except: pass
+    if 50 <= rsi < 70: 
+        score += 10
+        breakdown.append(f"زخم إيجابي (RSI: {rsi:.1f})")
+    elif rsi <= 30: 
+        score += 5
+        breakdown.append(f"تشبع بيعي (RSI: {rsi:.1f})")
+    elif rsi >= 70:
+        score -= 10
+        breakdown.append("تشبع شرائي خطير")
 
-    try:
-        avg_vol = volume.rolling(20).mean().iloc[-1]
-        if volume.iloc[-1] > avg_vol * 1.5:
-            p_vol_spike = 15
-            reasons.append("سيولة عالية")
-    except: pass
+    macd = close.ewm(span=12, adjust=False).mean() - close.ewm(span=26, adjust=False).mean()
+    signal = macd.ewm(span=9, adjust=False).mean()
+    if macd.iloc[-1] > signal.iloc[-1]: 
+        score += 10
+        breakdown.append("MACD إيجابي")
+    else: 
+        score -= 10
+        breakdown.append("MACD سلبي")
 
-    try:
-        delta = close.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rsi = 100 - (100 / (1 + (gain / loss))).iloc[-1]
-        if 50 <= rsi < 70: p_mom += 5; reasons.append("زخم إيجابي")
-    except: pass
+    # 3. محور السيولة والاختراق (Volume & Breakout)
+    recent_high = high.tail(20).max()
+    if current_price >= recent_high * 0.99: 
+        score += 15
+        breakdown.append("اختراق سعري قوي")
+        
+    avg_vol = volume.rolling(20).mean().iloc[-1]
+    if volume.iloc[-1] > avg_vol * 1.5:
+        score += 15
+        breakdown.append("انفجار في السيولة")
+        
+    daily_change = ((current_price - prev_close) / prev_close) * 100
+    if daily_change >= 5.0:
+        score += 20
+        breakdown.append(f"انفجار سعري (+{daily_change:.1f}%)")
 
-    score += (p_trend + p_mom + p_breakout + p_vol_spike + p_explosion)
+    # 4. محور التقلب والشموع (Volatility & Patterns)
+    upper_band = close.rolling(20).mean() + (close.rolling(20).std() * 2)
+    lower_band = close.rolling(20).mean() - (close.rolling(20).std() * 2)
+    if current_price <= lower_band.iloc[-1]: 
+        score += 10
+        breakdown.append("دعم بولينجر (فرصة شراء)")
+    elif current_price >= upper_band.iloc[-1]: 
+        score -= 5
+        
+    last_open, last_close = open_p.iloc[-1], close.iloc[-1]
+    prev_open, prev_close_val = open_p.iloc[-2], close.iloc[-2]
+    
+    if prev_close_val < prev_open and last_close > last_open and last_close > prev_open and last_open < prev_close_val:
+        score += 10
+        breakdown.append("شمعة ابتلاع صاعد")
+    
     score = max(0, min(100, score))
-    breakdown_str = f"انفجار: {p_explosion:+} | اختراق: {p_breakout:+} | سيولة: {p_vol_spike:+} | اتجاه: {p_trend:+} | زخم: {p_mom:+}"
     
-    if score >= 60:
+    if score >= 75:
+        rec = "شراء قوي جداً (STRONG BUY)"
+        intraday_target = current_price + (atr * 1.0)
+        swing_target = current_price + (atr * 3.0)
+        stop_loss = current_price - (atr * 1.5)
+    elif score >= 60:
         rec = "شراء (BUY)"
         intraday_target = current_price + (atr * 0.5)
         swing_target = current_price + (atr * 2.0)
         stop_loss = current_price - (atr * 1.5)
-    elif score <= 40:
+    elif score <= 30:
+        rec = "بيع قوي (STRONG SELL)"
+        intraday_target = current_price - (atr * 1.0)
+        swing_target = current_price - (atr * 3.0)
+        stop_loss = current_price + (atr * 1.5)
+    elif score <= 45:
         rec = "بيع (SELL)"
         intraday_target = current_price - (atr * 0.5)
         swing_target = current_price - (atr * 2.0)
@@ -285,12 +284,13 @@ def calculate_multi_factor(df):
         swing_target = current_price
         stop_loss = current_price - (atr * 1.0)
 
-    return score, rec, " | ".join(reasons[:2]), intraday_target, swing_target, stop_loss, is_above_smas, breakdown_str
+    breakdown_str = " | ".join(breakdown[:4])
+    return score, rec, breakdown_str, intraday_target, swing_target, stop_loss, is_above_smas, breakdown_str
 
 @st.cache_data(ttl=600)
 def get_multi_factor_score(ticker):
     df = fetch_data(ticker, "1d", "1y")
-    return calculate_multi_factor(df)
+    return calculate_advanced_confluence(df)
 
 @st.cache_data(ttl=600)
 def evaluate_and_sort_tickers(tickers):
@@ -309,14 +309,14 @@ def evaluate_and_sort_tickers(tickers):
                         df = data.dropna()
                     if len(df) < 50: continue
                     
-                    score, _, _, _, _, _, is_above_smas, _ = calculate_multi_factor(df)
+                    score, _, _, _, _, _, is_above_smas, _ = calculate_advanced_confluence(df)
                     
                     current = df['Close'].iloc[-1]
                     prev = df['Close'].iloc[-2]
                     daily_change = ((current - prev) / prev) * 100
                     
                     has_news = False
-                    if score >= 55 or daily_change >= 5:
+                    if score >= 60 or daily_change >= 5:
                         news = fetch_news(t)
                         if len(news) > 0: has_news = True
                             
@@ -382,7 +382,7 @@ with col_chart:
         selected_ticker = INDICES[selected_ticker_display]
     else:
         tickers_list = MARKETS[selected_market]
-        with st.spinner("جاري تقييم وترتيب الأسهم..."):
+        with st.spinner("جاري التحليل الشامل وترتيب الأسهم..."):
             eval_data = evaluate_and_sort_tickers(tickers_list)
                 
         def sort_priority(ticker):
@@ -393,10 +393,10 @@ with col_chart:
             score = data['score']
             
             if daily >= 5.0: return (5, daily, score)
-            elif is_above: return (4, score, daily)
-            elif has_news and score >= 60: return (3, score, daily)
-            elif score >= 60: return (2, score, daily)
-            elif score >= 40: return (1, score, daily)
+            elif is_above and score >= 60: return (4, score, daily)
+            elif is_above: return (3, score, daily)
+            elif has_news and score >= 60: return (2, score, daily)
+            elif score >= 60: return (1, score, daily)
             else: return (0, score, daily)
             
         sorted_tickers = sorted(eval_data.keys(), key=sort_priority, reverse=True)
@@ -410,7 +410,7 @@ with col_chart:
             name = COMPANY_NAMES.get(t, t)
             
             if daily >= 5.0: prefix = "🚀🔥"
-            elif is_above and has_news: prefix = "🚀📰"
+            elif is_above and s >= 60: prefix = "🏆"
             elif is_above: prefix = "🚀"
             elif has_news and s >= 60: prefix = "📰🟢"
             elif s >= 60: prefix = "🟢"
@@ -475,11 +475,11 @@ with col_sidebar:
         
         st.markdown(f"""
         <div class="side-card live-card">
-        <div class="card-title">🧠 محرك التقييم المتعدد</div>
+        <div class="card-title">🧠 محرك التحليل الخارق</div>
         <div class="score-badge" style="background-color: {score_color}20; color: {score_color}; border: 1px solid {score_color};">{total_score} / 100</div>
         <div style="text-align: center; font-weight: bold; font-size: 14px; color: {score_color}; margin-bottom: 5px;">{recommendation}</div>
-        <div style="font-size: 10px; color: #888; text-align: center; margin-bottom: 5px;">{reasons}</div>
-        <div class="breakdown-text">{breakdown}</div>
+        
+        <div class="breakdown-text"><b>أسباب التوصية:</b><br>{breakdown}</div>
         <div style="border-top: 1px solid #2a2e39; margin: 8px 0;"></div>
         
         <p class="price-text" style="color: {color};">${current_price:.2f}</p>
@@ -503,27 +503,37 @@ with col_sidebar:
         </div>
         """, unsafe_allow_html=True)
 
-        options_rec = get_options_recommendation(selected_ticker, current_price, recommendation, atr)
-        
-        if options_rec:
-            opt_color = "#00c853" if options_rec['change'] >= 0 else "#ff3d00"
-            opt_sign = "+" if options_rec['change'] >= 0 else ""
-            warning_html = '<div class="estimate-warning">⚠️ سعر تقديري (السيرفر مش راجع بيانات حقيقية)</div>' if options_rec.get('is_estimated') else ""
-            
-            st.markdown(f"""
-            <div class="side-card options-card">
+        # 🌟 التحقق من السوق: هل هو سعودي أو مصري؟
+        is_non_us_market = (".SR" in selected_ticker or ".CA" in selected_ticker)
+
+        if is_non_us_market:
+            st.markdown("""
+            <div class="side-card options-card" style="border-left-color: #555;">
             <div class="card-title">📄 عقود الخيارات</div>
-            {warning_html}
-            <div class="rec-item"><span class="rec-label">النوع:</span> <span style="color:#00bcd4; font-weight:bold;">{options_rec['type']}</span></div>
-            <div class="rec-item"><span class="rec-label">الانتهاء:</span> <span>{options_rec['expiration']}</span></div>
-            <div class="rec-item"><span class="rec-label">Strike:</span> <span>${options_rec['strike']:.2f}</span></div>
-            <div class="rec-item"><span class="rec-label">سعر العقد:</span> <span style="color:{opt_color}; font-weight:bold;">${options_rec['last_price']:.2f} ({opt_sign}{options_rec['change']:.2f})</span></div>
-            <div style="border-top: 1px dashed #2a2e39; margin: 6px 0;"></div>
-            <div class="rec-item"><span class="rec-label">هدف الجلسة (+30%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['session_target']:.2f}</span></div>
-            <div class="rec-item"><span class="rec-label">هدف الانتهاء (+100%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['expiry_target']:.2f}</span></div>
-            <div class="rec-item"><span class="rec-label">وقف الخسارة:</span> <span style="color:#ff3d00; font-weight:bold;">${options_rec['stop_loss']:.2f}</span></div>
+            <div class="news-item" style="text-align: center; color: #888;">عقود الخيارات غير متاحة في هذا السوق حالياً (متاحة للسوق الأمريكي فقط).</div>
             </div>
             """, unsafe_allow_html=True)
+        else:
+            options_rec = get_options_recommendation(selected_ticker, current_price, recommendation, atr)
+            if options_rec:
+                opt_color = "#00c853" if options_rec['change'] >= 0 else "#ff3d00"
+                opt_sign = "+" if options_rec['change'] >= 0 else ""
+                warning_html = '<div class="estimate-warning">⚠️ سعر تقديري (السيرفر مش راجع بيانات حقيقية)</div>' if options_rec.get('is_estimated') else ""
+                
+                st.markdown(f"""
+                <div class="side-card options-card">
+                <div class="card-title">📄 عقود الخيارات</div>
+                {warning_html}
+                <div class="rec-item"><span class="rec-label">النوع:</span> <span style="color:#00bcd4; font-weight:bold;">{options_rec['type']}</span></div>
+                <div class="rec-item"><span class="rec-label">الانتهاء:</span> <span>{options_rec['expiration']}</span></div>
+                <div class="rec-item"><span class="rec-label">Strike:</span> <span>${options_rec['strike']:.2f}</span></div>
+                <div class="rec-item"><span class="rec-label">سعر العقد:</span> <span style="color:{opt_color}; font-weight:bold;">${options_rec['last_price']:.2f} ({opt_sign}{options_rec['change']:.2f})</span></div>
+                <div style="border-top: 1px dashed #2a2e39; margin: 6px 0;"></div>
+                <div class="rec-item"><span class="rec-label">هدف الجلسة (+30%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['session_target']:.2f}</span></div>
+                <div class="rec-item"><span class="rec-label">هدف الانتهاء (+100%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['expiry_target']:.2f}</span></div>
+                <div class="rec-item"><span class="rec-label">وقف الخسارة:</span> <span style="color:#ff3d00; font-weight:bold;">${options_rec['stop_loss']:.2f}</span></div>
+                </div>
+                """, unsafe_allow_html=True)
 
         news = fetch_news(selected_ticker)
         news_html = "".join([f"<div class='news-item'>• {n}</div>" for n in news]) if news else "<div class='news-item'>لا توجد أخبار حديثة.</div>"
