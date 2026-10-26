@@ -21,6 +21,11 @@ footer {visibility: hidden;}
 .stApp { background-color: #131722; color: #d1d4dc; }
 .block-container { padding-top: 0.5rem; padding-bottom: 1rem; max-width: 98%; }
 
+/* 🌟 CSS لمنع الكيبورد من الظهور في القائمة المنسدلة */
+div[data-baseweb="select"] input {
+    display: none !important;
+}
+
 .top-bar { display: flex; align-items: center; gap: 10px; padding: 5px; font-family: sans-serif; margin-bottom: 5px; flex-wrap: wrap;}
 .ticker-name { font-size: 18px; font-weight: bold; color: #fff; }
 .ohlc-data { color: #d1d4dc; font-weight: bold; font-size: 12px;}
@@ -51,19 +56,45 @@ footer {visibility: hidden;}
 st_autorefresh(interval=60000, limit=None, key="live_refresh")
 
 # ==========================================
-# 2. القوائم والأسماء
+# 2. البيانات والقوائم (أمريكي ومؤشرات فقط)
 # ==========================================
-SAUDI_TICKERS = ["2222.SR", "2010.SR", "1120.SR", "1180.SR", "2350.SR", "1211.SR", "4013.SR", "7010.SR", "4300.SR", "2280.SR", "7020.SR", "7030.SR", "4014.SR", "1111.SR", "4015.SR", "4002.SR", "4004.SR", "4161.SR", "4192.SR", "7203.SR", "2082.SR", "6018.SR", "4191.SR", "8230.SR", "1810.SR", "1322.SR", "4230.SR", "4001.SR", "2050.SR", "2170.SR", "2310.SR", "2380.SR", "2060.SR", "3020.SR", "4030.SR", "4200.SR", "4260.SR", "4342.SR", "4344.SR", "8010.SR", "8210.SR", "8300.SR", "4003.SR", "2320.SR", "6050.SR", "2083.SR", "4334.SR", "2230.SR", "4328.SR", "6016.SR", "4290.SR"]
-US_TICKERS = ["SBRC", "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX", "AMD", "INTC", "JPM", "V", "WMT", "DIS", "ORCL", "CRM", "ADBE", "AVGO", "QCOM", "BAC", "GS", "MA", "PYPL", "COST", "NKE", "SBUX", "MCD", "JNJ", "UNH", "PFE", "LLY", "XOM", "CVX", "BA", "PLTR", "IBM", "GE", "CAT", "MMM", "HON", "UPS", "FDX", "T", "VZ", "TMUS", "CMCSA", "CSCO", "TXN", "AMAT", "MU", "LRCX"]
-EGYPT_TICKERS = ["COMI.CA", "EFIH.CA", "HRHO.CA", "ETEL.CA", "SWDY.CA", "EAST.CA", "TMGH.CA", "ABUK.CA", "SKPC.CA", "ORAS.CA", "AMOC.CA", "ESRS.CA", "HELI.CA", "ORTE.CA", "PHDC.CA", "MNHD.CA"]
+# قائمة ضخمة بأقوى الأسهم الأمريكية
+US_TICKERS = [
+    "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX", "AMD", "INTC", 
+    "JPM", "V", "WMT", "DIS", "ORCL", "CRM", "ADBE", "AVGO", "QCOM", "BAC", 
+    "GS", "MA", "PYPL", "COST", "NKE", "SBUX", "MCD", "JNJ", "UNH", "PFE", 
+    "LLY", "XOM", "CVX", "BA", "PLTR", "IBM", "GE", "CAT", "MMM", "HON", 
+    "UPS", "FDX", "T", "VZ", "TMUS", "CMCSA", "CSCO", "TXN", "AMAT", "MU", 
+    "LRCX", "SBRC", "SHOP", "SQ", "ROKU", "ZM", "DOCU", "SNOW", "U", "RBLX", 
+    "COIN", "HOOD", "SOFI", "AI", "PATH", "NET", "DDOG", "CRWD", "OKTA", "PANW"
+]
 
-COMPANY_NAMES = {
-    "SBRC": "Sound Equity", "2222.SR": "أرامكو", "2010.SR": "سابك", "1120.SR": "الراجحي", "1180.SR": "الأهلي", "2350.SR": "كيان", "1211.SR": "معادن", "4013.SR": "دله الصحية", "7010.SR": "الاتصالات", "4300.SR": "دار الأركان", "2280.SR": "المراعي", "7020.SR": "موبايلي", "7030.SR": "زين", "4014.SR": "علم", "1111.SR": "تداول", "4015.SR": "الدوائية", "4002.SR": "المواساة", "4004.SR": "الحبيب", "4161.SR": "بن داود", "4192.SR": "لجام", "7203.SR": "طيران ناس", "2082.SR": "أكوا باور", "6018.SR": "نادك", "4191.SR": "أم القرى", "8230.SR": "الراجحي للتأمين", "1810.SR": "سيرا القابضة", "1322.SR": "أملاك العالمية", "4230.SR": "البحر الأحمر", "4001.SR": "أسواق ع العثيم", "2050.SR": "صافولا", "2170.SR": "الأبحاث والإعلام", "2310.SR": "سبكيم", "2380.SR": "بترو رابغ", "2060.SR": "التصنيع", "3020.SR": "أسمنت اليمامة", "4030.SR": "البحري", "4200.SR": "الدريس", "4260.SR": "المواساة", "4342.SR": "جدوى ريت", "4344.SR": "الرياض ريت", "8010.SR": "التعاونية", "8210.SR": "بوبا العربية", "8300.SR": "الوطنية", "4003.SR": "الإنماء", "2320.SR": "البابطين", "6050.SR": "الأسماك", "2083.SR": "مرافق", "4334.SR": "المعذر ريت", "2230.SR": "الكيميائية", "4328.SR": "لدن", "6016.SR": "برغراينز", "4290.SR": "الخليج للتدريب",
-    "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet", "AMZN": "Amazon", "TSLA": "Tesla", "NVDA": "NVIDIA", "META": "Meta", "NFLX": "Netflix", "AMD": "AMD", "INTC": "Intel", "JPM": "JPMorgan", "V": "Visa", "WMT": "Walmart", "DIS": "Disney", "ORCL": "Oracle", "CRM": "Salesforce", "ADBE": "Adobe", "AVGO": "Broadcom", "QCOM": "Qualcomm", "BAC": "Bank of America", "GS": "Goldman Sachs", "MA": "Mastercard", "PYPL": "PayPal", "COST": "Costco", "NKE": "Nike", "SBUX": "Starbucks", "MCD": "McDonald's", "JNJ": "Johnson & Johnson", "UNH": "UnitedHealth", "PFE": "Pfizer", "LLY": "Eli Lilly", "XOM": "Exxon Mobil", "CVX": "Chevron", "BA": "Boeing", "PLTR": "Palantir", "IBM": "IBM", "GE": "General Electric", "CAT": "Caterpillar",
-    "COMI.CA": "البنك التجاري", "EFIH.CA": "إي فاينانس", "HRHO.CA": "هيرميس", "ETEL.CA": "المصرية للاتصالات", "SWDY.CA": "السويدي", "EAST.CA": "الشرقية إيسترن", "TMGH.CA": "طلعت مصطفى", "ABUK.CA": "أبو قير", "SKPC.CA": "سيدي كرير", "ORAS.CA": "أوراسكوم"
+INDICES = {
+    "S&P 500": "^GSPC", "Dow Jones": "^DJI", "NASDAQ": "^IXIC", 
+    "Russell 2000": "^RUT", "VIX (التقلب)": "^VIX"
 }
 
-MARKETS = {"🇸🇦 سعودي (Tadawul)": SAUDI_TICKERS, "🇺🇸 أمريكي (US)": US_TICKERS, "🇪🇬 مصري (EGX)": EGYPT_TICKERS}
+COMPANY_NAMES = {
+    "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet", "AMZN": "Amazon", "TSLA": "Tesla", 
+    "NVDA": "NVIDIA", "META": "Meta", "NFLX": "Netflix", "AMD": "AMD", "INTC": "Intel", 
+    "JPM": "JPMorgan", "V": "Visa", "WMT": "Walmart", "DIS": "Disney", "ORCL": "Oracle", 
+    "CRM": "Salesforce", "ADBE": "Adobe", "AVGO": "Broadcom", "QCOM": "Qualcomm", "BAC": "Bank of America", 
+    "GS": "Goldman Sachs", "MA": "Mastercard", "PYPL": "PayPal", "COST": "Costco", "NKE": "Nike", 
+    "SBUX": "Starbucks", "MCD": "McDonald's", "JNJ": "Johnson & Johnson", "UNH": "UnitedHealth", "PFE": "Pfizer", 
+    "LLY": "Eli Lilly", "XOM": "Exxon Mobil", "CVX": "Chevron", "BA": "Boeing", "PLTR": "Palantir", 
+    "IBM": "IBM", "GE": "General Electric", "CAT": "Caterpillar", "MMM": "3M", "HON": "Honeywell",
+    "UPS": "UPS", "FDX": "FedEx", "T": "AT&T", "VZ": "Verizon", "TMUS": "T-Mobile",
+    "CMCSA": "Comcast", "CSCO": "Cisco", "TXN": "Texas Instruments", "AMAT": "Applied Materials", "MU": "Micron",
+    "LRCX": "Lam Research", "SBRC": "Sound Equity", "SHOP": "Shopify", "SQ": "Block (Square)", 
+    "ROKU": "Roku", "ZM": "Zoom", "DOCU": "DocuSign", "SNOW": "Snowflake", "U": "Unity",
+    "RBLX": "Roblox", "COIN": "Coinbase", "HOOD": "Robinhood", "SOFI": "SoFi", "AI": "C3.ai",
+    "PATH": "UiPath", "NET": "Cloudflare", "DDOG": "Datadog", "CRWD": "CrowdStrike", "OKTA": "Okta", "PANW": "Palo Alto"
+}
+
+MARKETS = {
+    "🇺🇸 أمريكي (US)": US_TICKERS,
+    "📊 المؤشرات (Indices)": list(INDICES.keys())
+}
 
 TIMEFRAMES = {
     "1m": {"interval": "1m", "period": "7d"},
@@ -75,12 +106,13 @@ TIMEFRAMES = {
 }
 
 # ==========================================
-# 3. دوال التحليل
+# 3. دوال التحليل (مع المؤشرات الجديدة)
 # ==========================================
 @st.cache_data(ttl=60)
 def fetch_data(ticker, interval, period):
     try:
         df = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
+        if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(1) # Fix yfinance multiindex
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
         return df
     except: return pd.DataFrame()
@@ -101,6 +133,7 @@ def analyze_stock(df, ticker):
     prev_close = close.iloc[-2]
     atr = (high - low).rolling(14).mean().iloc[-1]
 
+    # المتوسطات
     sma20 = close.rolling(20).mean().iloc[-1]
     sma30 = close.rolling(30).mean().iloc[-1]
     sma50 = close.rolling(50).mean().iloc[-1]
@@ -111,13 +144,15 @@ def analyze_stock(df, ticker):
     score = 50
     breakdown = ["نقاط البداية: 50"]
     
+    # 1. المتوسطات
     if is_above_mas:
-        score += 20
-        breakdown.append("فوق متوسط 20/30/50: +20")
+        score += 15
+        breakdown.append("فوق المتوسطات: +15")
     elif is_below_mas:
-        score -= 20
-        breakdown.append("تحت متوسط 20/30/50: -20")
+        score -= 15
+        breakdown.append("تحت المتوسطات: -15")
 
+    # 2. RSI
     delta = close.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -125,14 +160,15 @@ def analyze_stock(df, ticker):
     
     if 50 <= rsi < 70: 
         score += 10
-        breakdown.append("زخم RSI: +10")
+        breakdown.append("RSI إيجابي: +10")
     elif rsi >= 70: 
-        score -= 5
-        breakdown.append("تشبع شرائي: -5")
+        score -= 10
+        breakdown.append("RSI تشبع شرائي: -10")
     elif rsi <= 30:
-        score += 5
-        breakdown.append("تشبع بيعي: +5")
+        score += 10
+        breakdown.append("RSI تشبع بيعي: +10")
 
+    # 3. MACD
     macd = close.ewm(span=12, adjust=False).mean() - close.ewm(span=26, adjust=False).mean()
     signal = macd.ewm(span=9, adjust=False).mean()
     if macd.iloc[-1] > signal.iloc[-1]: 
@@ -142,42 +178,70 @@ def analyze_stock(df, ticker):
         score -= 10
         breakdown.append("MACD سلبي: -10")
 
-    recent_high = high.tail(20).max()
-    if current_price >= recent_high * 0.99: 
+    # 4. Stochastic
+    lowest_low = low.rolling(window=14).min()
+    highest_high = high.rolling(window=14).max()
+    stoch_k = 100 * ((close - lowest_low) / (highest_high - lowest_low))
+    stoch_d = stoch_k.rolling(window=3).mean()
+    
+    if stoch_k.iloc[-1] > stoch_d.iloc[-1] and stoch_k.iloc[-1] < 80:
+        score += 5
+        breakdown.append("Stochastic إيجابي: +5")
+    elif stoch_k.iloc[-1] < stoch_d.iloc[-1] and stoch_k.iloc[-1] > 20:
+        score -= 5
+        breakdown.append("Stochastic سلبي: -5")
+
+    # 5. Bollinger Bands
+    bb_middle = close.rolling(window=20).mean()
+    bb_std = close.rolling(window=20).std()
+    bb_upper = bb_middle + (bb_std * 2)
+    bb_lower = bb_middle - (bb_std * 2)
+
+    if current_price <= bb_lower.iloc[-1]:
+        score += 10
+        breakdown.append("دعم بولينجر: +10")
+    elif current_price >= bb_upper.iloc[-1]:
+        score -= 10
+        breakdown.append("مقاومة بولينجر: -10")
+
+    # 6. ADX (قوة الاتجاه)
+    plus_dm = high.diff()
+    minus_dm = low.diff()
+    plus_dm[plus_dm < 0] = 0
+    minus_dm[minus_dm > 0] = 0
+    tr = pd.concat([high - low, (high - close.shift()).abs(), (low - close.shift()).abs()], axis=1).max(axis=1)
+    atr_adx = tr.rolling(14).mean()
+    plus_di = 100 * (plus_dm.rolling(14).mean() / atr_adx)
+    minus_di = 100 * (minus_dm.abs().rolling(14).mean() / atr_adx)
+    dx = (plus_di - minus_di).abs() / (plus_di + minus_di) * 100
+    adx = dx.rolling(14).mean()
+    
+    if adx.iloc[-1] > 25:
+        score += 5
+        breakdown.append("اتجاه قوي ADX: +5")
+
+    # 7. الاختراق والسيولة
+    if current_price >= high.tail(20).max() * 0.99: 
         score += 10
         breakdown.append("اختراق سعري: +10")
         
-    avg_vol = volume.rolling(20).mean().iloc[-1]
-    if volume.iloc[-1] > avg_vol * 1.5:
+    if volume.iloc[-1] > volume.rolling(20).mean().iloc[-1] * 1.5:
         score += 10
         breakdown.append("انفجار سيولة: +10")
 
     score = max(10, min(95, score))
     breakdown.append(f"<b>الإجمالي: {score}%</b>")
     
-    # 🌟 ضبط التوصيات عشان تطابق اللون
     if score >= 65:
-        if is_above_mas:
-            rec = "شراء قوي (STRONG BUY)"
-            intraday_target = current_price + (atr * 1.0)
-            swing_target = current_price + (atr * 3.0)
-            stop_loss = current_price - (atr * 1.5)
-        else:
-            rec = "شراء (BUY)" # تقييم عالي بس لسه مش فوق المتوسطات (ارتداد)
-            intraday_target = current_price + (atr * 0.5)
-            swing_target = current_price + (atr * 2.0)
-            stop_loss = current_price - (atr * 1.5)
+        rec = "شراء قوي (STRONG BUY)" if is_above_mas else "شراء (BUY)"
+        intraday_target = current_price + (atr * 1.0)
+        swing_target = current_price + (atr * 3.0)
+        stop_loss = current_price - (atr * 1.5)
     elif score <= 40:
-        if is_below_mas:
-            rec = "بيع قوي (STRONG SELL)"
-            intraday_target = current_price - (atr * 1.0)
-            swing_target = current_price - (atr * 3.0)
-            stop_loss = current_price + (atr * 1.5)
-        else:
-            rec = "بيع (SELL)"
-            intraday_target = current_price - (atr * 0.5)
-            swing_target = current_price - (atr * 2.0)
-            stop_loss = current_price + (atr * 1.5)
+        rec = "بيع قوي (STRONG SELL)" if is_below_mas else "بيع (SELL)"
+        intraday_target = current_price - (atr * 1.0)
+        swing_target = current_price - (atr * 3.0)
+        stop_loss = current_price + (atr * 1.5)
     else:
         rec = "احتفاظ (HOLD)"
         intraday_target = current_price
@@ -186,7 +250,6 @@ def analyze_stock(df, ticker):
 
     return score, is_above_mas, is_below_mas, rec, intraday_target, swing_target, stop_loss, "<br>".join(breakdown)
 
-# 🌟 الدالة دي بقت بتاخد الفريم وتحدث البيانات بناءً عليه
 @st.cache_data(ttl=600)
 def evaluate_tickers(tickers, interval, period):
     results = {}
@@ -196,7 +259,7 @@ def evaluate_tickers(tickers, interval, period):
             if len(df) < 50: continue
             score, is_above_mas, is_below_mas, rec, _, _, _, _ = analyze_stock(df, t)
             results[t] = {'score': score, 'is_above_mas': is_above_mas, 'is_below_mas': is_below_mas, 'rec': rec}
-            time.sleep(0.1) # تأخير لتجنب الحظر
+            time.sleep(0.1)
         except: pass
     return results
 
@@ -209,19 +272,24 @@ with col_chart:
     c1, c2, c3 = st.columns([1.5, 1.5, 1])
     with c1:
         market_options = list(MARKETS.keys())
-        selected_market = st.selectbox("السوق", market_options, index=1, label_visibility="collapsed")
+        selected_market = st.selectbox("السوق", market_options, index=0, label_visibility="collapsed")
     with c2:
         filter_mode = st.selectbox("الفلتر", ["الكل ⚖️", "إيجابي (فوق المتوسطات) 🚀", "سلبي (تحت المتوسطات) 🔻"], label_visibility="collapsed")
     with c3:
-        # 🌟 بدأنا بـ 30m كافتراضي
         selected_timeframe = st.selectbox("الإطار", list(TIMEFRAMES.keys()), index=3, label_visibility="collapsed")
 
-    tickers_list = MARKETS[selected_market]
     tf_config = TIMEFRAMES[selected_timeframe]
-    
-    # 🌟 بنحدث البيانات بناءً على الفريم المختار
+
+    # 🌟 اختيار السهم (قائمة أو كتابة يدوية)
+    if selected_market == "📊 المؤشرات (Indices)":
+        ticker_symbols = [INDICES[k] for k in INDICES]
+        custom_ticker = st.text_input("أو اكتب رمز المؤشر يدوياً (مثال: ^GSPC):", "").strip().upper()
+    else:
+        ticker_symbols = US_TICKERS
+        custom_ticker = st.text_input("أو اكتب رمز السهم يدوياً (مثال: AAPL, TSLA):", "").strip().upper()
+
     with st.spinner(f"جاري تحديث بيانات السوق بناءً على فريم {selected_timeframe}..."):
-        eval_data = evaluate_tickers(tickers_list, tf_config["interval"], tf_config["period"])
+        eval_data = evaluate_tickers(ticker_symbols, tf_config["interval"], tf_config["period"])
 
     if filter_mode == "إيجابي (فوق المتوسطات) 🚀":
         filtered_tickers = [t for t, data in eval_data.items() if data['is_above_mas']]
@@ -232,21 +300,24 @@ with col_chart:
 
     filtered_tickers = sorted(filtered_tickers, key=lambda x: eval_data[x]['score'], reverse=True)
 
-    if not filtered_tickers:
+    if not filtered_tickers and not custom_ticker:
         st.warning(f"لا توجد أسهم تتطابق مع الفلتر المختار ({filter_mode}) على فريم {selected_timeframe} حالياً.")
         st.stop()
 
     def format_ticker(t):
-        data = eval_data[t]
+        data = eval_data.get(t, {'is_above_mas': False, 'is_below_mas': False})
         if data['is_above_mas']: prefix = "🚀"
         elif data['is_below_mas']: prefix = "🔻"
         else: prefix = "⚖️"
         return f"{prefix} {COMPANY_NAMES.get(t, t)} ({t})"
 
-    selected_ticker = st.selectbox("اختر السهم:", filtered_tickers, format_func=format_ticker, label_visibility="collapsed")
+    # لو المستخدم كتب سهم يدوي، نستخدمه، غير كده نستخدم القائمة
+    if custom_ticker:
+        selected_ticker = custom_ticker
+    else:
+        selected_ticker = st.selectbox("اختر السهم:", filtered_tickers, format_func=format_ticker, label_visibility="collapsed")
 
     # --- رسم الشارت ---
-    # بنجيب بيانات السهم المختار على نفس الفريم
     df = fetch_data(selected_ticker, tf_config["interval"], tf_config["period"])
 
     if not df.empty:
