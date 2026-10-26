@@ -9,7 +9,34 @@ import datetime
 import time
 
 # ==========================================
-# 1. إعدادات الصفحة والتصميم
+# 1. إعدادات Webull API
+# ==========================================
+try:
+    from webull.data.common.category import Category
+    from webull.data.common.timespan import Timespan
+    from webull.core.client import ApiClient
+    from webull.data.data_client import DataClient
+    WEBULL_AVAILABLE = True
+except ImportError:
+    WEBULL_AVAILABLE = False
+
+# 🌟 ضع مفاتيح Webull هنا
+WEBULL_APP_KEY = "YOUR_APP_KEY"
+WEBULL_APP_SECRET = "YOUR_APP_SECRET"
+WEBULL_REGION = "us"
+WEBULL_API_ENDPOINT = "api.webull.com"
+
+webull_data_client = None
+if WEBULL_AVAILABLE and WEBULL_APP_KEY != "YOUR_APP_KEY":
+    try:
+        api_client = ApiClient(WEBULL_APP_KEY, WEBULL_APP_SECRET, WEBULL_REGION)
+        api_client.add_endpoint(WEBULL_REGION, WEBULL_API_ENDPOINT)
+        webull_data_client = DataClient(api_client)
+    except Exception as e:
+        st.error(f"خطأ في تهيئة Webull: {e}")
+
+# ==========================================
+# 2. إعدادات الصفحة والتصميم
 # ==========================================
 st.set_page_config(page_title="Pro Trading Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
@@ -55,16 +82,14 @@ footer {visibility: hidden;}
 st_autorefresh(interval=60000, limit=None, key="live_refresh")
 
 # ==========================================
-# 2. البيانات (إضافة أسهم الصورة)
+# 3. البيانات والقوائم
 # ==========================================
-# 🌟 إضافة الأسهم اللي في الصورة للقائمة
 SAUDI_TICKERS = [
     "2222.SR", "2010.SR", "1120.SR", "1180.SR", "2350.SR", "1211.SR", "4013.SR", "7010.SR", "4300.SR",
     "2280.SR", "7020.SR", "7030.SR", "4014.SR", "1111.SR", "4015.SR", "4002.SR", "4004.SR", "4161.SR",
     "4192.SR", "7203.SR", "2082.SR", "6018.SR", "4191.SR", "8230.SR", "1810.SR", "1322.SR", "4230.SR",
     "4001.SR", "2050.SR", "2170.SR", "2310.SR", "2380.SR", "2060.SR", "3020.SR", "4030.SR", "4200.SR", 
     "4260.SR", "4342.SR", "4344.SR", "8010.SR", "8210.SR", "8300.SR", "4003.SR", "4006.SR", "4007.SR",
-    # 🌟 أسهم الصورة (البابطين، الأسماك، مرافق، المعذر، الكيميائية، لدن، برغراينز، الخليج للتدريب)
     "2320.SR", "6050.SR", "2083.SR", "4334.SR", "2230.SR", "4328.SR", "6016.SR", "4290.SR"
 ]
 
@@ -90,7 +115,6 @@ COMPANY_NAMES = {
     "2050.SR": "صافولا", "2170.SR": "الأبحاث والإعلام", "2310.SR": "سبكيم", "2380.SR": "بترو رابغ", "2060.SR": "التصنيع", 
     "3020.SR": "أسمنت اليمامة", "4030.SR": "البحري", "4200.SR": "الدريس", "4260.SR": "المواساة", "4342.SR": "جدوى ريت",
     "4344.SR": "الرياض ريت", "8010.SR": "التعاونية", "8210.SR": "بوبا العربية", "8300.SR": "الوطنية", "4003.SR": "الإنماء",
-    # 🌟 أسماء أسهم الصورة
     "2320.SR": "البابطين", "6050.SR": "الأسماك", "2083.SR": "مرافق", "4334.SR": "المعذر ريت", 
     "2230.SR": "الكيميائية", "4328.SR": "لدن", "6016.SR": "برغراينز", "4290.SR": "الخليج للتدريب",
     
@@ -118,21 +142,48 @@ INDICES = {
 }
 
 TIMEFRAMES = {
-    "1m": {"interval": "1m", "period": "7d"}, "5m": {"interval": "5m", "period": "60d"},
-    "15m": {"interval": "15m", "period": "60d"}, "1h": {"interval": "60m", "period": "730d"},
-    "1d": {"interval": "1d", "period": "5y"}, "1wk": {"interval": "1wk", "period": "5y"},
+    "1m": {"interval": "1m", "period": "7d"},
+    "5m": {"interval": "5m", "period": "60d"},
+    "15m": {"interval": "15m", "period": "60d"},
+    "1h": {"interval": "60m", "period": "730d"},
+    "1d": {"interval": "1d", "period": "5y"},
+    "1wk": {"interval": "1wk", "period": "5y"},
 }
 
 # ==========================================
-# 3. الدوال الأساسية
+# 4. دوال جلب البيانات (Webull + yfinance)
 # ==========================================
 @st.cache_data(ttl=60)
 def fetch_data(ticker, interval, period):
+    is_us_stock = ticker.isalpha() or (not ticker.endswith("=X") and ".SR" not in ticker and ".CA" not in ticker)
+    
+    if is_us_stock and webull_data_client is not None:
+        try:
+            timespan_map = {
+                "1m": Timespan.M1.name, "5m": Timespan.M5.name, "15m": Timespan.M15.name,
+                "30m": Timespan.M30.name, "1h": Timespan.H1.name, "1d": Timespan.D1.name,
+                "1wk": Timespan.W1.name, "1mo": Timespan.MO1.name
+            }
+            webull_timespan = timespan_map.get(interval, Timespan.D1.name)
+            
+            res = webull_data_client.market_data.get_history_bar(ticker, Category.US_STOCK.name, webull_timespan)
+            if res.status_code == 200:
+                data = res.json()
+                if 'data' in data and len(data['data']) > 0:
+                    df = pd.DataFrame(data['data'])
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                    df.set_index('timestamp', inplace=True)
+                    df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True)
+                    return df
+        except Exception as e:
+            print(f"Webull error for {ticker}: {e}. Falling back to yfinance.")
+    
     try:
         df = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
         return df
-    except: return pd.DataFrame()
+    except:
+        return pd.DataFrame()
 
 @st.cache_data(ttl=60)
 def fetch_extended_hours(ticker):
@@ -150,10 +201,8 @@ def get_liquidity_info(ticker):
         bid = info.get('bid', 0)
         ask = info.get('ask', 0)
         price = info.get('currentPrice', info.get('regularMarketPrice', 1))
-        
         if bid == 0 or ask == 0: return "غير متاح حالياً", 0.0, "#888"
         spread_pct = ((ask - bid) / price) * 100
-        
         if vol > 5_000_000 and spread_pct < 0.1: status, color = "عالية جداً", "#00c853"
         elif vol > 1_000_000: status, color = "متوسطة", "#ff9800"
         else: status, color = "ضعيفة", "#ff3d00"
@@ -167,7 +216,6 @@ def fetch_news(ticker):
         return [n['title'] for n in news[:2]] if news else []
     except: return []
 
-# 🌟 محرك التقييم الجديد (بيصطاد الانفجارات السعرية)
 def calculate_multi_factor(df):
     if df.empty or len(df) < 50: 
         return 50, "بيانات غير كافية", "محايد", 0, 0, 0, False, "لا توجد بيانات كافية"
@@ -181,7 +229,6 @@ def calculate_multi_factor(df):
     prev_close = close.iloc[-2]
     atr = (high - low).rolling(14).mean().iloc[-1]
 
-    # 1. فحص المتوسطات
     sma20 = close.rolling(20).mean().iloc[-1]
     sma30 = close.rolling(30).mean().iloc[-1]
     sma50 = close.rolling(50).mean().iloc[-1]
@@ -191,13 +238,11 @@ def calculate_multi_factor(df):
         p_trend = 15
         reasons.append("فوق متوسط 20 و 30 و 50")
 
-    # 🌟 2. فحص الانفجار السعري (الطلوع القوي النهاردة)
     daily_change_pct = ((current_price - prev_close) / prev_close) * 100
     if daily_change_pct >= 5.0:
-        p_explosion = 40 # نقاط ضخمة جداً لو السهم طالع 5% أو أكتر
+        p_explosion = 40
         reasons.append(f"انفجار سعري (+{daily_change_pct:.1f}%)")
     
-    # 3. الاختراق
     try:
         recent_high = high.tail(20).max()
         if current_price >= recent_high * 0.99: 
@@ -205,7 +250,6 @@ def calculate_multi_factor(df):
             reasons.append("اختراق سعري")
     except: pass
 
-    # 4. السيولة
     try:
         avg_vol = volume.rolling(20).mean().iloc[-1]
         if volume.iloc[-1] > avg_vol * 1.5:
@@ -213,7 +257,6 @@ def calculate_multi_factor(df):
             reasons.append("سيولة عالية")
     except: pass
 
-    # 5. الزخم
     try:
         delta = close.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
@@ -249,7 +292,6 @@ def get_multi_factor_score(ticker):
     df = fetch_data(ticker, "1d", "1y")
     return calculate_multi_factor(df)
 
-# 🌟 دالة الترتيب الجديدة (الانفجارات أولاً)
 @st.cache_data(ttl=600)
 def evaluate_and_sort_tickers(tickers):
     results = {}
@@ -269,7 +311,6 @@ def evaluate_and_sort_tickers(tickers):
                     
                     score, _, _, _, _, _, is_above_smas, _ = calculate_multi_factor(df)
                     
-                    # حساب نسبة التغير النهاردة
                     current = df['Close'].iloc[-1]
                     prev = df['Close'].iloc[-2]
                     daily_change = ((current - prev) / prev) * 100
@@ -323,7 +364,7 @@ def get_options_recommendation(ticker, current_price, general_rec, atr):
     }
 
 # ==========================================
-# 4. تقسيم الشاشة والعرض
+# 5. تقسيم الشاشة والعرض
 # ==========================================
 col_chart, col_sidebar = st.columns([2.5, 1], gap="medium")
 
@@ -341,10 +382,9 @@ with col_chart:
         selected_ticker = INDICES[selected_ticker_display]
     else:
         tickers_list = MARKETS[selected_market]
-        with st.spinner("جاري تقييم وترتيب الأسهم (انفجارات + متوسطات)..."):
+        with st.spinner("جاري تقييم وترتيب الأسهم..."):
             eval_data = evaluate_and_sort_tickers(tickers_list)
                 
-        # 🌟 الترتيب الجديد: الانفجارات فوق كل حاجة
         def sort_priority(ticker):
             data = eval_data.get(ticker, {'score': 0, 'above_smas': False, 'has_news': False, 'daily_change': 0})
             daily = data['daily_change']
@@ -352,11 +392,8 @@ with col_chart:
             has_news = data['has_news']
             score = data['score']
             
-            # الأولوية القصوى للانفجارات (5% أو أكتر)
             if daily >= 5.0: return (5, daily, score)
-            # بعدين فوق المتوسطات
             elif is_above: return (4, score, daily)
-            # بعدين اللي معاه أخبار
             elif has_news and score >= 60: return (3, score, daily)
             elif score >= 60: return (2, score, daily)
             elif score >= 40: return (1, score, daily)
@@ -372,21 +409,13 @@ with col_chart:
             daily = data['daily_change']
             name = COMPANY_NAMES.get(t, t)
             
-            # شكل القائمة
-            if daily >= 5.0:
-                prefix = "🚀🔥" # انفجار سعري
-            elif is_above and has_news:
-                prefix = "🚀📰" # فوق المتوسطات وأخبار
-            elif is_above:
-                prefix = "🚀" # فوق المتوسطات
-            elif has_news and s >= 60:
-                prefix = "📰🟢"
-            elif s >= 60:
-                prefix = "🟢"
-            elif s <= 40:
-                prefix = "🔴"
-            else:
-                prefix = "🟡"
+            if daily >= 5.0: prefix = "🚀🔥"
+            elif is_above and has_news: prefix = "🚀📰"
+            elif is_above: prefix = "🚀"
+            elif has_news and s >= 60: prefix = "📰🟢"
+            elif s >= 60: prefix = "🟢"
+            elif s <= 40: prefix = "🔴"
+            else: prefix = "🟡"
                 
             return f"{prefix} {name} ({t}) - {s}"
         
