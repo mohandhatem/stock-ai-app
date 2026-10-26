@@ -55,36 +55,29 @@ footer {visibility: hidden;}
 st_autorefresh(interval=60000, limit=None, key="live_refresh")
 
 # ==========================================
-# 2. البيانات (قوائم ضخمة ومضمونة)
+# 2. البيانات الضخمة والمضمونة
 # ==========================================
-# قائمة أسهم السوق السعودي (أهم 60 سهم)
 SAUDI_TICKERS = [
     "2222.SR", "2010.SR", "1120.SR", "1180.SR", "2350.SR", "1211.SR", "4013.SR", "7010.SR", "4300.SR",
     "2280.SR", "7020.SR", "7030.SR", "4014.SR", "1111.SR", "4015.SR", "4002.SR", "4004.SR", "4161.SR",
     "4192.SR", "7203.SR", "2082.SR", "6018.SR", "4191.SR", "8230.SR", "1810.SR", "1322.SR", "4230.SR",
     "4001.SR", "2050.SR", "2170.SR", "2310.SR", "2380.SR", "2060.SR", "3020.SR", "4030.SR", "4200.SR", 
-    "4260.SR", "4342.SR", "4344.SR", "8010.SR", "8210.SR", "8300.SR", "4003.SR", "4006.SR", "4007.SR", 
-    "4142.SR", "4162.SR", "4180.SR", "4322.SR", "4340.SR", "6001.SR", "6002.SR", "6004.SR", "6010.SR",
-    "8012.SR", "8020.SR", "8030.SR", "8040.SR", "8050.SR", "8060.SR", "8100.SR", "8200.SR"
+    "4260.SR", "4342.SR", "4344.SR", "8010.SR", "8210.SR", "8300.SR", "4003.SR", "4006.SR", "4007.SR"
 ]
 
-# قائمة أسهم السوق الأمريكي (أهم 100 سهم)
 US_TICKERS = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX", "AMD", "INTC", "JPM", "V", "WMT", "DIS",
     "ORCL", "CRM", "ADBE", "AVGO", "QCOM", "BAC", "GS", "MA", "PYPL", "COST", "NKE", "SBUX", "MCD", 
     "JNJ", "UNH", "PFE", "LLY", "XOM", "CVX", "BA", "PLTR", "IBM", "GE", "CAT", "MMM", "HON", "UPS",
-    "FDX", "T", "VZ", "TMUS", "CMCSA", "CSCO", "TXN", "AMAT", "MU", "LRCX", "KLAC", "SNOW", "PLTR"
+    "FDX", "T", "VZ", "TMUS", "CMCSA", "CSCO", "TXN", "AMAT", "MU", "LRCX"
 ]
 
-# قائمة أسهم السوق المصري
 EGYPT_TICKERS = [
     "COMI.CA", "EFIH.CA", "HRHO.CA", "ETEL.CA", "SWDY.CA", "EAST.CA", "TMGH.CA", "ABUK.CA", 
-    "SKPC.CA", "ORAS.CA", "AMOC.CA", "ESRS.CA", "HELI.CA", "ORTE.CA", "PHDC.CA", "MNHD.CA", 
-    "CICH.CA", "CIEB.CA", "ADIB.CA", "FAITA.CA"
+    "SKPC.CA", "ORAS.CA", "AMOC.CA", "ESRS.CA", "HELI.CA", "ORTE.CA", "PHDC.CA", "MNHD.CA"
 ]
 
 COMPANY_NAMES = {
-    # سعودي
     "2222.SR": "أرامكو", "2010.SR": "سابك", "1120.SR": "الراجحي", "1180.SR": "الأهلي", "2350.SR": "كيان", 
     "1211.SR": "معادن", "4013.SR": "دله الصحية", "7010.SR": "الاتصالات", "4300.SR": "دار الأركان", 
     "2280.SR": "المراعي", "7020.SR": "موبايلي", "7030.SR": "زين", "4014.SR": "علم", "1111.SR": "تداول", 
@@ -95,7 +88,6 @@ COMPANY_NAMES = {
     "3020.SR": "أسمنت اليمامة", "4030.SR": "البحري", "4200.SR": "الدريس", "4260.SR": "المواساة", "4342.SR": "جدوى ريت",
     "4344.SR": "الرياض ريت", "8010.SR": "التعاونية", "8210.SR": "بوبا العربية", "8300.SR": "الوطنية", "4003.SR": "الإنماء",
     
-    # أمريكي
     "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet", "AMZN": "Amazon", "TSLA": "Tesla", 
     "NVDA": "NVIDIA", "META": "Meta", "NFLX": "Netflix", "AMD": "AMD", "INTC": "Intel", "JPM": "JPMorgan", 
     "V": "Visa", "WMT": "Walmart", "DIS": "Disney", "ORCL": "Oracle", "CRM": "Salesforce", "ADBE": "Adobe", 
@@ -104,7 +96,6 @@ COMPANY_NAMES = {
     "JNJ": "Johnson & Johnson", "UNH": "UnitedHealth", "PFE": "Pfizer", "LLY": "Eli Lilly", "XOM": "Exxon Mobil", 
     "CVX": "Chevron", "BA": "Boeing", "PLTR": "Palantir", "IBM": "IBM", "GE": "General Electric", "CAT": "Caterpillar",
 
-    # مصري
     "COMI.CA": "البنك التجاري", "EFIH.CA": "إي فاينانس", "HRHO.CA": "هيرميس", "ETEL.CA": "المصرية للاتصالات", 
     "SWDY.CA": "السويدي", "EAST.CA": "الشرقية إيسترن", "TMGH.CA": "طلعت مصطفى", "ABUK.CA": "أبو قير", "SKPC.CA": "سيدي كرير", 
 }
@@ -170,26 +161,29 @@ def fetch_news(ticker):
         return [n['title'] for n in news[:2]] if news else []
     except: return []
 
-# 🌟 محرك التحليل الجديد (يركز على الاختراق والسيولة)
+# 🌟 دالة حساب التقييم والمتوسطات
 def calculate_multi_factor(df):
     if df.empty or len(df) < 50: 
-        return 50, "بيانات غير كافية", "محايد", 0, 0, 0, "لا توجد بيانات كافية"
+        return 50, "بيانات غير كافية", "محايد", 0, 0, 0, False, "لا توجد بيانات كافية"
 
     score = 50
     reasons = []
-    p_trend, p_mom, p_vol, p_obv, p_candle = 0, 0, 0, 0, 0
-    p_breakout, p_vol_spike = 0, 0
+    p_trend, p_mom, p_breakout, p_vol_spike = 0, 0, 0, 0
     
     close, high, low, volume = df['Close'], df['High'], df['Low'], df['Volume']
     current_price = close.iloc[-1]
     atr = (high - low).rolling(14).mean().iloc[-1]
 
-    # الاتجاه
-    try:
-        sma20, sma50 = close.rolling(20).mean().iloc[-1], close.rolling(50).mean().iloc[-1]
-        if current_price > sma20 and sma20 > sma50: p_trend += 10; reasons.append("اتجاه صاعد")
-        elif current_price < sma20 and sma20 < sma50: p_trend -= 10; reasons.append("اتجاه هابط")
-    except: pass
+    # فحص المتوسطات (20 و 30 و 50)
+    sma20 = close.rolling(20).mean().iloc[-1]
+    sma30 = close.rolling(30).mean().iloc[-1]
+    sma50 = close.rolling(50).mean().iloc[-1]
+    
+    is_above_smas = (current_price > sma20) and (sma20 > sma30) and (sma30 > sma50)
+    
+    if is_above_smas:
+        p_trend = 20
+        reasons.append("فوق متوسط 20 و 30 و 50")
 
     # الزخم
     try:
@@ -198,30 +192,24 @@ def calculate_multi_factor(df):
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rsi = 100 - (100 / (1 + (gain / loss))).iloc[-1]
         if 50 <= rsi < 70: p_mom += 5; reasons.append("زخم إيجابي")
-        
-        macd = close.ewm(span=12, adjust=False).mean() - close.ewm(span=26, adjust=False).mean()
-        signal = macd.ewm(span=9, adjust=False).mean()
-        if macd.iloc[-1] > signal.iloc[-1]: p_mom += 5; reasons.append("MACD إيجابي")
-        else: p_mom -= 5; reasons.append("MACD سلبي")
     except: pass
 
-    # 🌟 الاختراق السعري (السر اللي بيكشف سيرا والبحر الأحمر)
+    # الاختراق والسيولة
     try:
         recent_high = high.tail(20).max()
         if current_price >= recent_high * 0.99: 
-            p_breakout = 30 # وزنه عالي جداً
-            reasons.append("اختراق سعري قوي")
+            p_breakout = 20
+            reasons.append("اختراق سعري")
     except: pass
 
-    # 🌟 انفجار السيولة (التأكيد)
     try:
         avg_vol = volume.rolling(20).mean().iloc[-1]
         if volume.iloc[-1] > avg_vol * 1.5:
-            p_vol_spike = 20
-            reasons.append("سيولة عالية جداً")
+            p_vol_spike = 15
+            reasons.append("سيولة عالية")
     except: pass
 
-    score += (p_trend + p_mom + p_vol + p_obv + p_candle + p_breakout + p_vol_spike)
+    score += (p_trend + p_mom + p_breakout + p_vol_spike)
     score = max(0, min(100, score))
     breakdown_str = f"اختراق: {p_breakout:+} | سيولة: {p_vol_spike:+} | اتجاه: {p_trend:+} | زخم: {p_mom:+}"
     
@@ -241,19 +229,20 @@ def calculate_multi_factor(df):
         swing_target = current_price
         stop_loss = current_price - (atr * 1.0)
 
-    return score, rec, " | ".join(reasons[:2]), intraday_target, swing_target, stop_loss, breakdown_str
+    return score, rec, " | ".join(reasons[:2]), intraday_target, swing_target, stop_loss, is_above_smas, breakdown_str
 
 @st.cache_data(ttl=600)
 def get_multi_factor_score(ticker):
     df = fetch_data(ticker, "1d", "1y")
     return calculate_multi_factor(df)
 
-# 🌟 تقييم القوائم دفعة واحدة (Bulk)
+# 🌟 الدالة اللي بتعمل الترتيب بالأولوية (المتوسطات + الأخبار + التقييم)
 @st.cache_data(ttl=600)
-def bulk_evaluate_tickers(tickers):
-    if not tickers: return {}
-    scores = {}
-    chunk_size = 15 # تقليل الحجم عشان السيرفر ميهنجش
+def evaluate_and_sort_tickers(tickers):
+    results = {}
+    
+    # نقسم القائمة لمجموعات عشان السيرفر ميهنجش
+    chunk_size = 10
     for i in range(0, len(tickers), chunk_size):
         chunk = tickers[i:i+chunk_size]
         try:
@@ -266,11 +255,24 @@ def bulk_evaluate_tickers(tickers):
                     else:
                         df = data.dropna()
                     if len(df) < 50: continue
-                    score, _, _, _, _, _, _ = calculate_multi_factor(df)
-                    scores[t] = score
+                    
+                    score, _, _, _, _, _, is_above_smas, _ = calculate_multi_factor(df)
+                    
+                    # فحص الأخبار للأسهم اللي تقييمها كويس أو فوق المتوسطات
+                    has_news = False
+                    if score >= 55 or is_above_smas:
+                        news = fetch_news(t)
+                        if len(news) > 0:
+                            has_news = True
+                            
+                    results[t] = {
+                        'score': score,
+                        'above_smas': is_above_smas,
+                        'has_news': has_news
+                    }
                 except: pass
         except: pass
-    return scores
+    return results
 
 @st.cache_data(ttl=600)
 def get_options_recommendation(ticker, current_price, general_rec, atr):
@@ -293,7 +295,6 @@ def get_options_recommendation(ticker, current_price, general_rec, atr):
                     }
     except: pass
     
-    # سعر تقديري لو السيرفر رافض
     est_exp = (datetime.date.today() + datetime.timedelta(days=30)).strftime("%Y-%m-%d")
     est_price = round(current_price * 0.02, 2)
     est_strike = round(current_price * 1.02, 2) if "شراء" in general_rec else round(current_price * 0.98, 2)
@@ -325,18 +326,56 @@ with col_chart:
         selected_ticker = INDICES[selected_ticker_display]
     else:
         tickers_list = MARKETS[selected_market]
-        with st.spinner("جاري تقييم وترتيب الأسهم..."):
-            stock_scores_dict = bulk_evaluate_tickers(tickers_list)
+        with st.spinner("جاري تقييم وترتيب الأسهم (متوسطات + أخبار)..."):
+            eval_data = evaluate_and_sort_tickers(tickers_list)
                 
-        sorted_tickers = sorted(stock_scores_dict.keys(), key=lambda x: stock_scores_dict.get(x, 0), reverse=True)
+        # 🌟 الترتيب بالأولوية اللي إنت طلبتها
+        def sort_priority(ticker):
+            data = eval_data.get(ticker, {'score': 0, 'above_smas': False, 'has_news': False})
+            is_above = data['above_smas']
+            has_news = data['has_news']
+            score = data['score']
+            
+            # الأولوية القصوى: فوق المتوسطات + أخبار
+            if is_above and has_news: priority = 5
+            # فوق المتوسطات
+            elif is_above: priority = 4
+            # أخبار كويسة وتقييم عالي
+            elif has_news and score >= 60: priority = 3
+            # تقييم عالي
+            elif score >= 60: priority = 2
+            # محايد
+            elif score >= 40: priority = 1
+            # ضعيف
+            else: priority = 0
+            
+            # الترتيب بالـ Priority الأول، وبعدين بالـ Score
+            return (priority, score)
+            
+        sorted_tickers = sorted(eval_data.keys(), key=sort_priority, reverse=True)
         
         def format_ticker(t):
-            s = stock_scores_dict.get(t, 50)
+            data = eval_data.get(t, {'score': 50, 'above_smas': False, 'has_news': False})
+            s = data['score']
+            is_above = data['above_smas']
+            has_news = data['has_news']
             name = COMPANY_NAMES.get(t, t)
-            if s >= 60: emoji = "🟢"
-            elif s <= 40: emoji = "🔴"
-            else: emoji = "🟡"
-            return f"{emoji} {name} ({t}) - {s}"
+            
+            # الشكل النهائي للقائمة
+            if is_above and has_news:
+                prefix = "🚀📰" # قمة
+            elif is_above:
+                prefix = "🚀" # فوق المتوسطات
+            elif has_news and s >= 60:
+                prefix = "📰🟢" # أخبار قوية
+            elif s >= 60:
+                prefix = "🟢" # شراء
+            elif s <= 40:
+                prefix = "🔴" # بيع
+            else:
+                prefix = "🟡" # محايد
+                
+            return f"{prefix} {name} ({t}) - {s}"
         
         selected_ticker = st.selectbox("اختر السهم:", sorted_tickers, format_func=format_ticker, label_visibility="collapsed")
 
@@ -389,7 +428,7 @@ with col_sidebar:
         ext_price = fetch_extended_hours(selected_ticker)
         ext_html = f'<p class="pre-market-text">PRE: ${ext_price:.2f}</p>' if ext_price and ext_price > 0 else ""
 
-        total_score, recommendation, reasons, intraday_t, swing_t, stock_sl, breakdown = get_multi_factor_score(selected_ticker)
+        total_score, recommendation, reasons, intraday_t, swing_t, stock_sl, is_above, breakdown = get_multi_factor_score(selected_ticker)
         score_color = "#00c853" if total_score >= 60 else ("#ff3d00" if total_score <= 40 else "#ff9800")
         
         st.markdown(f"""
