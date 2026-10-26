@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 from streamlit_autorefresh import st_autorefresh
 import datetime
+import time
 
 # ==========================================
 # 1. إعدادات الصفحة والتصميم
@@ -53,7 +54,7 @@ st_autorefresh(interval=60000, limit=None, key="live_refresh")
 # 2. القوائم والأسماء
 # ==========================================
 SAUDI_TICKERS = ["2222.SR", "2010.SR", "1120.SR", "1180.SR", "2350.SR", "1211.SR", "4013.SR", "7010.SR", "4300.SR", "2280.SR", "7020.SR", "7030.SR", "4014.SR", "1111.SR", "4015.SR", "4002.SR", "4004.SR", "4161.SR", "4192.SR", "7203.SR", "2082.SR", "6018.SR", "4191.SR", "8230.SR", "1810.SR", "1322.SR", "4230.SR", "4001.SR", "2050.SR", "2170.SR", "2310.SR", "2380.SR", "2060.SR", "3020.SR", "4030.SR", "4200.SR", "4260.SR", "4342.SR", "4344.SR", "8010.SR", "8210.SR", "8300.SR", "4003.SR", "2320.SR", "6050.SR", "2083.SR", "4334.SR", "2230.SR", "4328.SR", "6016.SR", "4290.SR"]
-US_TICKERS = ["SBRC", "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX", "AMD", "INTC", "JPM", "V", "WMT", "DIS", "ORCL", "CRM", "ADBE", "AVGO", "QCOM", "BAC", "GS", "MA", "PYPL", "COST", "NKE", "SBUX", "MCD", "JNJ", "UNH", "PFE", "LLY", "XOM", "CVX", "BA", "PLTR", "IBM", "GE", "CAT"]
+US_TICKERS = ["SBRC", "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX", "AMD", "INTC", "JPM", "V", "WMT", "DIS", "ORCL", "CRM", "ADBE", "AVGO", "QCOM", "BAC", "GS", "MA", "PYPL", "COST", "NKE", "SBUX", "MCD", "JNJ", "UNH", "PFE", "LLY", "XOM", "CVX", "BA", "PLTR", "IBM", "GE", "CAT", "MMM", "HON", "UPS", "FDX", "T", "VZ", "TMUS", "CMCSA", "CSCO", "TXN", "AMAT", "MU", "LRCX"]
 EGYPT_TICKERS = ["COMI.CA", "EFIH.CA", "HRHO.CA", "ETEL.CA", "SWDY.CA", "EAST.CA", "TMGH.CA", "ABUK.CA", "SKPC.CA", "ORAS.CA", "AMOC.CA", "ESRS.CA", "HELI.CA", "ORTE.CA", "PHDC.CA", "MNHD.CA"]
 
 COMPANY_NAMES = {
@@ -63,12 +64,12 @@ COMPANY_NAMES = {
 }
 
 MARKETS = {"🇸🇦 سعودي (Tadawul)": SAUDI_TICKERS, "🇺🇸 أمريكي (US)": US_TICKERS, "🇪🇬 مصري (EGX)": EGYPT_TICKERS}
-TIMEFRAMES = {"1m": {"interval": "1m", "period": "7d"}, "5m": {"interval": "5m", "period": "60d"}, "15m": {"interval": "15m", "period": "60d"}, "1h": {"interval": "60m", "period": "730d"}, "1d": {"interval": "1d", "period": "5y"}}
+TIMEFRAMES = {"5m": {"interval": "5m", "period": "60d"}, "15m": {"interval": "15m", "period": "60d"}, "1h": {"interval": "60m", "period": "730d"}, "1d": {"interval": "1d", "period": "5y"}}
 
 # ==========================================
-# 3. دوال التحليل
+# 3. دوال جلب البيانات والتحليل
 # ==========================================
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def fetch_data(ticker, interval, period):
     try:
         df = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
@@ -83,7 +84,6 @@ def fetch_news(ticker):
         return [n['title'] for n in news[:2]] if news else []
     except: return []
 
-# 🌟 محرك التحليل (فلتر المتوسطات أولاً ثم المؤشرات)
 def analyze_stock(df, ticker):
     if df.empty or len(df) < 50: 
         return 50, False, "بيانات غير كافية", 0, 0, 0, "لا توجد بيانات"
@@ -93,15 +93,13 @@ def analyze_stock(df, ticker):
     prev_close = close.iloc[-2]
     atr = (high - low).rolling(14).mean().iloc[-1]
 
-    # 1. فلتر المتوسطات الصارم
+    # فحص المتوسطات
     sma20 = close.rolling(20).mean().iloc[-1]
     sma30 = close.rolling(30).mean().iloc[-1]
     sma50 = close.rolling(50).mean().iloc[-1]
     
-    # الشرط: السعر > 20، و 20 > 30، و 30 > 50
     is_above_mas = (current_price > sma20) and (sma20 > sma30) and (sma30 > sma50)
 
-    # 2. حساب التقييم
     score = 50
     breakdown = ["نقاط البداية: 50"]
     
@@ -134,7 +132,6 @@ def analyze_stock(df, ticker):
         score -= 10
         breakdown.append("MACD سلبي: -10")
 
-    # اختراق وسيولة
     recent_high = high.tail(20).max()
     if current_price >= recent_high * 0.99: 
         score += 10
@@ -148,7 +145,6 @@ def analyze_stock(df, ticker):
     score = max(10, min(95, score))
     breakdown.append(f"<b>الإجمالي: {score}%</b>")
     
-    # التوصية والأهداف
     if score >= 70 and is_above_mas:
         rec = "شراء قوي (STRONG BUY)"
         intraday_target = current_price + (atr * 1.0)
@@ -176,6 +172,7 @@ def evaluate_tickers(tickers):
             if len(df) < 50: continue
             score, is_above_mas, rec, _, _, _, _ = analyze_stock(df, t)
             results[t] = {'score': score, 'is_above_mas': is_above_mas, 'rec': rec}
+            time.sleep(0.1) # تأخير بسيط لتجنب الحظر
         except: pass
     return results
 
@@ -190,14 +187,14 @@ with col_chart:
         market_options = list(MARKETS.keys())
         selected_market = st.selectbox("السوق", market_options, index=1, label_visibility="collapsed")
     with c2:
-        selected_timeframe = st.selectbox("الإطار الزمني", list(TIMEFRAMES.keys()), index=4, label_visibility="collapsed")
+        selected_timeframe = st.selectbox("الإطار الزمني", list(TIMEFRAMES.keys()), index=3, label_visibility="collapsed")
 
     tickers_list = MARKETS[selected_market]
     
     with st.spinner("جاري فلترة الأسهم فوق المتوسطات وتحليلها..."):
         eval_data = evaluate_tickers(tickers_list)
 
-    # 🌟 فلترة: عرض الأسهم اللي فوق المتوسطات بس ومرتبة
+    # فلترة: عرض الأسهم اللي فوق المتوسطات بس ومرتبة
     strong_tickers = [t for t, data in eval_data.items() if data['is_above_mas']]
     strong_tickers = sorted(strong_tickers, key=lambda x: eval_data[x]['score'], reverse=True)
 
@@ -205,10 +202,10 @@ with col_chart:
         st.warning("لا توجد أسهم تتداول فوق متوسط 20 و 30 و 50 حالياً في هذا السوق.")
         st.stop()
 
+    # 🌟 إزالة أيقونة العقد 📄 من هنا
     def format_ticker(t):
         s = eval_data[t]['score']
-        has_opt = " 📄" if t.isalpha() else ""
-        return f"🚀 {COMPANY_NAMES.get(t, t)} ({t}){has_opt}"
+        return f"🚀 {COMPANY_NAMES.get(t, t)} ({t})"
 
     selected_ticker = st.selectbox("الأسهم الإيجابية (فوق المتوسطات):", strong_tickers, format_func=format_ticker, label_visibility="collapsed")
 
