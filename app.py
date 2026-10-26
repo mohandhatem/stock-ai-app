@@ -9,7 +9,7 @@ import datetime
 import time
 
 # ==========================================
-# 1. إعدادات الصفحة والتصميم (متوافق مع الموبايل)
+# 1. إعدادات الصفحة والتصميم
 # ==========================================
 st.set_page_config(page_title="Pro Trading Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
@@ -55,14 +55,17 @@ footer {visibility: hidden;}
 st_autorefresh(interval=60000, limit=None, key="live_refresh")
 
 # ==========================================
-# 2. البيانات الضخمة والمضمونة
+# 2. البيانات (إضافة أسهم الصورة)
 # ==========================================
+# 🌟 إضافة الأسهم اللي في الصورة للقائمة
 SAUDI_TICKERS = [
     "2222.SR", "2010.SR", "1120.SR", "1180.SR", "2350.SR", "1211.SR", "4013.SR", "7010.SR", "4300.SR",
     "2280.SR", "7020.SR", "7030.SR", "4014.SR", "1111.SR", "4015.SR", "4002.SR", "4004.SR", "4161.SR",
     "4192.SR", "7203.SR", "2082.SR", "6018.SR", "4191.SR", "8230.SR", "1810.SR", "1322.SR", "4230.SR",
     "4001.SR", "2050.SR", "2170.SR", "2310.SR", "2380.SR", "2060.SR", "3020.SR", "4030.SR", "4200.SR", 
-    "4260.SR", "4342.SR", "4344.SR", "8010.SR", "8210.SR", "8300.SR", "4003.SR", "4006.SR", "4007.SR"
+    "4260.SR", "4342.SR", "4344.SR", "8010.SR", "8210.SR", "8300.SR", "4003.SR", "4006.SR", "4007.SR",
+    # 🌟 أسهم الصورة (البابطين، الأسماك، مرافق، المعذر، الكيميائية، لدن، برغراينز، الخليج للتدريب)
+    "2320.SR", "6050.SR", "2083.SR", "4334.SR", "2230.SR", "4328.SR", "6016.SR", "4290.SR"
 ]
 
 US_TICKERS = [
@@ -87,6 +90,9 @@ COMPANY_NAMES = {
     "2050.SR": "صافولا", "2170.SR": "الأبحاث والإعلام", "2310.SR": "سبكيم", "2380.SR": "بترو رابغ", "2060.SR": "التصنيع", 
     "3020.SR": "أسمنت اليمامة", "4030.SR": "البحري", "4200.SR": "الدريس", "4260.SR": "المواساة", "4342.SR": "جدوى ريت",
     "4344.SR": "الرياض ريت", "8010.SR": "التعاونية", "8210.SR": "بوبا العربية", "8300.SR": "الوطنية", "4003.SR": "الإنماء",
+    # 🌟 أسماء أسهم الصورة
+    "2320.SR": "البابطين", "6050.SR": "الأسماك", "2083.SR": "مرافق", "4334.SR": "المعذر ريت", 
+    "2230.SR": "الكيميائية", "4328.SR": "لدن", "6016.SR": "برغراينز", "4290.SR": "الخليج للتدريب",
     
     "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet", "AMZN": "Amazon", "TSLA": "Tesla", 
     "NVDA": "NVIDIA", "META": "Meta", "NFLX": "Netflix", "AMD": "AMD", "INTC": "Intel", "JPM": "JPMorgan", 
@@ -161,31 +167,53 @@ def fetch_news(ticker):
         return [n['title'] for n in news[:2]] if news else []
     except: return []
 
-# 🌟 دالة حساب التقييم والمتوسطات
+# 🌟 محرك التقييم الجديد (بيصطاد الانفجارات السعرية)
 def calculate_multi_factor(df):
     if df.empty or len(df) < 50: 
         return 50, "بيانات غير كافية", "محايد", 0, 0, 0, False, "لا توجد بيانات كافية"
 
     score = 50
     reasons = []
-    p_trend, p_mom, p_breakout, p_vol_spike = 0, 0, 0, 0
+    p_trend, p_mom, p_breakout, p_vol_spike, p_explosion = 0, 0, 0, 0, 0
     
-    close, high, low, volume = df['Close'], df['High'], df['Low'], df['Volume']
+    close, open_p, high, low, volume = df['Close'], df['Open'], df['High'], df['Low'], df['Volume']
     current_price = close.iloc[-1]
+    prev_close = close.iloc[-2]
     atr = (high - low).rolling(14).mean().iloc[-1]
 
-    # فحص المتوسطات (20 و 30 و 50)
+    # 1. فحص المتوسطات
     sma20 = close.rolling(20).mean().iloc[-1]
     sma30 = close.rolling(30).mean().iloc[-1]
     sma50 = close.rolling(50).mean().iloc[-1]
     
     is_above_smas = (current_price > sma20) and (sma20 > sma30) and (sma30 > sma50)
-    
     if is_above_smas:
-        p_trend = 20
+        p_trend = 15
         reasons.append("فوق متوسط 20 و 30 و 50")
 
-    # الزخم
+    # 🌟 2. فحص الانفجار السعري (الطلوع القوي النهاردة)
+    daily_change_pct = ((current_price - prev_close) / prev_close) * 100
+    if daily_change_pct >= 5.0:
+        p_explosion = 40 # نقاط ضخمة جداً لو السهم طالع 5% أو أكتر
+        reasons.append(f"انفجار سعري (+{daily_change_pct:.1f}%)")
+    
+    # 3. الاختراق
+    try:
+        recent_high = high.tail(20).max()
+        if current_price >= recent_high * 0.99: 
+            p_breakout = 20
+            reasons.append("اختراق سعري")
+    except: pass
+
+    # 4. السيولة
+    try:
+        avg_vol = volume.rolling(20).mean().iloc[-1]
+        if volume.iloc[-1] > avg_vol * 1.5:
+            p_vol_spike = 15
+            reasons.append("سيولة عالية")
+    except: pass
+
+    # 5. الزخم
     try:
         delta = close.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
@@ -194,24 +222,9 @@ def calculate_multi_factor(df):
         if 50 <= rsi < 70: p_mom += 5; reasons.append("زخم إيجابي")
     except: pass
 
-    # الاختراق والسيولة
-    try:
-        recent_high = high.tail(20).max()
-        if current_price >= recent_high * 0.99: 
-            p_breakout = 20
-            reasons.append("اختراق سعري")
-    except: pass
-
-    try:
-        avg_vol = volume.rolling(20).mean().iloc[-1]
-        if volume.iloc[-1] > avg_vol * 1.5:
-            p_vol_spike = 15
-            reasons.append("سيولة عالية")
-    except: pass
-
-    score += (p_trend + p_mom + p_breakout + p_vol_spike)
+    score += (p_trend + p_mom + p_breakout + p_vol_spike + p_explosion)
     score = max(0, min(100, score))
-    breakdown_str = f"اختراق: {p_breakout:+} | سيولة: {p_vol_spike:+} | اتجاه: {p_trend:+} | زخم: {p_mom:+}"
+    breakdown_str = f"انفجار: {p_explosion:+} | اختراق: {p_breakout:+} | سيولة: {p_vol_spike:+} | اتجاه: {p_trend:+} | زخم: {p_mom:+}"
     
     if score >= 60:
         rec = "شراء (BUY)"
@@ -236,12 +249,10 @@ def get_multi_factor_score(ticker):
     df = fetch_data(ticker, "1d", "1y")
     return calculate_multi_factor(df)
 
-# 🌟 الدالة اللي بتعمل الترتيب بالأولوية (المتوسطات + الأخبار + التقييم)
+# 🌟 دالة الترتيب الجديدة (الانفجارات أولاً)
 @st.cache_data(ttl=600)
 def evaluate_and_sort_tickers(tickers):
     results = {}
-    
-    # نقسم القائمة لمجموعات عشان السيرفر ميهنجش
     chunk_size = 10
     for i in range(0, len(tickers), chunk_size):
         chunk = tickers[i:i+chunk_size]
@@ -258,17 +269,21 @@ def evaluate_and_sort_tickers(tickers):
                     
                     score, _, _, _, _, _, is_above_smas, _ = calculate_multi_factor(df)
                     
-                    # فحص الأخبار للأسهم اللي تقييمها كويس أو فوق المتوسطات
+                    # حساب نسبة التغير النهاردة
+                    current = df['Close'].iloc[-1]
+                    prev = df['Close'].iloc[-2]
+                    daily_change = ((current - prev) / prev) * 100
+                    
                     has_news = False
-                    if score >= 55 or is_above_smas:
+                    if score >= 55 or daily_change >= 5:
                         news = fetch_news(t)
-                        if len(news) > 0:
-                            has_news = True
+                        if len(news) > 0: has_news = True
                             
                     results[t] = {
                         'score': score,
                         'above_smas': is_above_smas,
-                        'has_news': has_news
+                        'has_news': has_news,
+                        'daily_change': daily_change
                     }
                 except: pass
         except: pass
@@ -326,54 +341,52 @@ with col_chart:
         selected_ticker = INDICES[selected_ticker_display]
     else:
         tickers_list = MARKETS[selected_market]
-        with st.spinner("جاري تقييم وترتيب الأسهم (متوسطات + أخبار)..."):
+        with st.spinner("جاري تقييم وترتيب الأسهم (انفجارات + متوسطات)..."):
             eval_data = evaluate_and_sort_tickers(tickers_list)
                 
-        # 🌟 الترتيب بالأولوية اللي إنت طلبتها
+        # 🌟 الترتيب الجديد: الانفجارات فوق كل حاجة
         def sort_priority(ticker):
-            data = eval_data.get(ticker, {'score': 0, 'above_smas': False, 'has_news': False})
+            data = eval_data.get(ticker, {'score': 0, 'above_smas': False, 'has_news': False, 'daily_change': 0})
+            daily = data['daily_change']
             is_above = data['above_smas']
             has_news = data['has_news']
             score = data['score']
             
-            # الأولوية القصوى: فوق المتوسطات + أخبار
-            if is_above and has_news: priority = 5
-            # فوق المتوسطات
-            elif is_above: priority = 4
-            # أخبار كويسة وتقييم عالي
-            elif has_news and score >= 60: priority = 3
-            # تقييم عالي
-            elif score >= 60: priority = 2
-            # محايد
-            elif score >= 40: priority = 1
-            # ضعيف
-            else: priority = 0
-            
-            # الترتيب بالـ Priority الأول، وبعدين بالـ Score
-            return (priority, score)
+            # الأولوية القصوى للانفجارات (5% أو أكتر)
+            if daily >= 5.0: return (5, daily, score)
+            # بعدين فوق المتوسطات
+            elif is_above: return (4, score, daily)
+            # بعدين اللي معاه أخبار
+            elif has_news and score >= 60: return (3, score, daily)
+            elif score >= 60: return (2, score, daily)
+            elif score >= 40: return (1, score, daily)
+            else: return (0, score, daily)
             
         sorted_tickers = sorted(eval_data.keys(), key=sort_priority, reverse=True)
         
         def format_ticker(t):
-            data = eval_data.get(t, {'score': 50, 'above_smas': False, 'has_news': False})
+            data = eval_data.get(t, {'score': 50, 'above_smas': False, 'has_news': False, 'daily_change': 0})
             s = data['score']
             is_above = data['above_smas']
             has_news = data['has_news']
+            daily = data['daily_change']
             name = COMPANY_NAMES.get(t, t)
             
-            # الشكل النهائي للقائمة
-            if is_above and has_news:
-                prefix = "🚀📰" # قمة
+            # شكل القائمة
+            if daily >= 5.0:
+                prefix = "🚀🔥" # انفجار سعري
+            elif is_above and has_news:
+                prefix = "🚀📰" # فوق المتوسطات وأخبار
             elif is_above:
                 prefix = "🚀" # فوق المتوسطات
             elif has_news and s >= 60:
-                prefix = "📰🟢" # أخبار قوية
+                prefix = "📰🟢"
             elif s >= 60:
-                prefix = "🟢" # شراء
+                prefix = "🟢"
             elif s <= 40:
-                prefix = "🔴" # بيع
+                prefix = "🔴"
             else:
-                prefix = "🟡" # محايد
+                prefix = "🟡"
                 
             return f"{prefix} {name} ({t}) - {s}"
         
