@@ -42,7 +42,6 @@ footer {visibility: hidden;}
 .score-badge { font-size: 22px; font-weight: bold; padding: 8px; border-radius: 8px; text-align: center; margin-bottom: 8px;}
 .breakdown-text { font-size: 9px; color: #6c757d; text-align: center; margin-top: 5px; line-height: 1.5; border-top: 1px dashed #2a2e39; padding-top: 5px;}
 
-/* تصميم للموبايل */
 @media (max-width: 768px) {
     .block-container { padding: 0rem !important; }
     .side-card { border-radius: 0; margin-bottom: 5px; border-left: none; border-bottom: 2px solid #2a2e39; }
@@ -126,7 +125,13 @@ def get_liquidity_info(ticker):
         bid = info.get('bid', 0)
         ask = info.get('ask', 0)
         price = info.get('currentPrice', info.get('regularMarketPrice', 1))
-        spread_pct = ((ask - bid) / price) * 100 if bid > 0 and ask > 0 and price > 0 else 0
+        
+        # لو مفيش Bid و Ask يبقى السوق مقفول أو البيانات مش متاحة
+        if bid == 0 or ask == 0:
+            return "غير متاح حالياً", 0.0, "#888"
+
+        spread_pct = ((ask - bid) / price) * 100
+        
         if vol > 5_000_000 and spread_pct < 0.1: status, color = "عالية جداً", "#00c853"
         elif vol > 1_000_000: status, color = "متوسطة", "#ff9800"
         else: status, color = "ضعيفة", "#ff3d00"
@@ -221,6 +226,7 @@ def get_multi_factor_score(ticker):
 
     return score, rec, " | ".join(reasons[:2]), intraday_target, swing_target, stop_loss, breakdown_str
 
+# 🌟 الدالة المحدثة لجلب عقود الخيارات (بتحاول أكتر من مرة وتجرب تواريخ مختلفة)
 @st.cache_data(ttl=600)
 def get_options_recommendation(ticker, current_price, general_rec):
     try:
@@ -228,19 +234,32 @@ def get_options_recommendation(ticker, current_price, general_rec):
         expirations = stock.options
         if not expirations: return None
         
-        valid_exps = [e for e in expirations if (datetime.datetime.strptime(e, '%Y-%m-%d').date() - datetime.date.today()).days > 14]
-        if not valid_exps: valid_exps = expirations
-        target_exp = valid_exps[0]
+        # هنحاول نجرب أول 3 تواريخ انتهاء متاحين لحد ما نلاقي بيانات
+        chain = None
+        target_exp = None
+        for exp in expirations[:3]:
+            try:
+                temp_chain = stock.option_chain(exp)
+                if not temp_chain.calls.empty and not temp_chain.puts.empty:
+                    chain = temp_chain
+                    target_exp = exp
+                    break
+            except:
+                continue
+                
+        if chain is None: return None
         
-        chain = stock.option_chain(target_exp)
         calls, puts = chain.calls, chain.puts
-        if calls.empty or puts.empty: return None
         
+        # اختيار العقد الأقرب للسعر
         chosen = calls.loc[abs(calls['strike'] - current_price).idxmin()] if "شراء" in general_rec else puts.loc[abs(puts['strike'] - current_price).idxmin()]
         option_type = "Call (ATM)" if "شراء" in general_rec else "Put (ATM)"
             
         last_price = chosen['lastPrice']
         
+        # لو سعر العقد صفر (بيحصل في العقود البعيدة جداً)، نرجع None
+        if last_price == 0: return None
+
         return {
             "type": option_type, "expiration": target_exp, "strike": chosen['strike'],
             "last_price": last_price, "stop_loss": last_price * 0.80, 
@@ -251,7 +270,7 @@ def get_options_recommendation(ticker, current_price, general_rec):
     except: return None
 
 # ==========================================
-# 3. تقسيم الشاشة (يتحول لشكل طولي على الموبايل)
+# 3. تقسيم الشاشة
 # ==========================================
 col_chart, col_sidebar = st.columns([2.5, 1], gap="medium")
 
@@ -330,12 +349,9 @@ with col_chart:
         colors = ['#089981' if close >= open else '#f23645' for open, close in zip(df_plot['Open'], df_plot['Close'])]
         fig.add_trace(go.Bar(x=df_plot.index, y=df_plot['Volume'], name="Volume", marker_color=colors), row=2, col=1)
 
-        # إزالة العرض الثابت (1200) عشان يتكيف مع الموبايل
         fig.update_layout(
             template="plotly_dark", paper_bgcolor='#131722', plot_bgcolor='#131722', 
-            height=400, # تقليل الطول شوية ليناسب الموبايل
-            autosize=True,
-            margin=dict(l=5, r=5, t=5, b=5), 
+            height=400, autosize=True, margin=dict(l=5, r=5, t=5, b=5), 
             showlegend=False, dragmode="pan", hovermode="x unified", uirevision='constant',
             xaxis=dict(showgrid=True, gridcolor='#2a2e39', fixedrange=False),
             yaxis=dict(showgrid=True, gridcolor='#2a2e39', side='right', fixedrange=False)
@@ -404,7 +420,7 @@ with col_sidebar:
             st.markdown("""
             <div class="side-card options-card">
             <div class="card-title">📄 عقود الخيارات</div>
-            <div class="news-item">لا توجد بيانات عقود متاحة لهذا السهم حالياً.</div>
+            <div class="news-item">سيرفر البيانات مش راجع عقود متاحة دلوقتي. جرب تحديث الصفحة أو اختيار سهم تاني.</div>
             </div>
             """, unsafe_allow_html=True)
 
