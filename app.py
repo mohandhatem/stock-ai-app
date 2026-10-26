@@ -7,7 +7,6 @@ import numpy as np
 from streamlit_autorefresh import st_autorefresh
 import datetime
 import time
-import requests
 
 # ==========================================
 # 1. إعدادات الصفحة والتصميم (متوافق مع الموبايل)
@@ -56,51 +55,69 @@ footer {visibility: hidden;}
 st_autorefresh(interval=60000, limit=None, key="live_refresh")
 
 # ==========================================
-# 2. البيانات والدوال الأساسية
+# 2. البيانات (قوائم ضخمة ومضمونة)
 # ==========================================
-# 🌟 قاموس ضخم بأسماء الشركات (عشان الأسماء تظهر بدل الأرقام)
+# قائمة أسهم السوق السعودي (أهم 60 سهم)
+SAUDI_TICKERS = [
+    "2222.SR", "2010.SR", "1120.SR", "1180.SR", "2350.SR", "1211.SR", "4013.SR", "7010.SR", "4300.SR",
+    "2280.SR", "7020.SR", "7030.SR", "4014.SR", "1111.SR", "4015.SR", "4002.SR", "4004.SR", "4161.SR",
+    "4192.SR", "7203.SR", "2082.SR", "6018.SR", "4191.SR", "8230.SR", "1810.SR", "1322.SR", "4230.SR",
+    "4001.SR", "2050.SR", "2170.SR", "2310.SR", "2380.SR", "2060.SR", "3020.SR", "4030.SR", "4200.SR", 
+    "4260.SR", "4342.SR", "4344.SR", "8010.SR", "8210.SR", "8300.SR", "4003.SR", "4006.SR", "4007.SR", 
+    "4142.SR", "4162.SR", "4180.SR", "4322.SR", "4340.SR", "6001.SR", "6002.SR", "6004.SR", "6010.SR",
+    "8012.SR", "8020.SR", "8030.SR", "8040.SR", "8050.SR", "8060.SR", "8100.SR", "8200.SR"
+]
+
+# قائمة أسهم السوق الأمريكي (أهم 100 سهم)
+US_TICKERS = [
+    "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX", "AMD", "INTC", "JPM", "V", "WMT", "DIS",
+    "ORCL", "CRM", "ADBE", "AVGO", "QCOM", "BAC", "GS", "MA", "PYPL", "COST", "NKE", "SBUX", "MCD", 
+    "JNJ", "UNH", "PFE", "LLY", "XOM", "CVX", "BA", "PLTR", "IBM", "GE", "CAT", "MMM", "HON", "UPS",
+    "FDX", "T", "VZ", "TMUS", "CMCSA", "CSCO", "TXN", "AMAT", "MU", "LRCX", "KLAC", "SNOW", "PLTR"
+]
+
+# قائمة أسهم السوق المصري
+EGYPT_TICKERS = [
+    "COMI.CA", "EFIH.CA", "HRHO.CA", "ETEL.CA", "SWDY.CA", "EAST.CA", "TMGH.CA", "ABUK.CA", 
+    "SKPC.CA", "ORAS.CA", "AMOC.CA", "ESRS.CA", "HELI.CA", "ORTE.CA", "PHDC.CA", "MNHD.CA", 
+    "CICH.CA", "CIEB.CA", "ADIB.CA", "FAITA.CA"
+]
+
 COMPANY_NAMES = {
+    # سعودي
+    "2222.SR": "أرامكو", "2010.SR": "سابك", "1120.SR": "الراجحي", "1180.SR": "الأهلي", "2350.SR": "كيان", 
+    "1211.SR": "معادن", "4013.SR": "دله الصحية", "7010.SR": "الاتصالات", "4300.SR": "دار الأركان", 
+    "2280.SR": "المراعي", "7020.SR": "موبايلي", "7030.SR": "زين", "4014.SR": "علم", "1111.SR": "تداول", 
+    "4015.SR": "الدوائية", "4002.SR": "المواساة", "4004.SR": "الحبيب", "4161.SR": "بن داود", "4192.SR": "لجام", 
+    "7203.SR": "طيران ناس", "2082.SR": "أكوا باور", "6018.SR": "نادك", "4191.SR": "أم القرى", "8230.SR": "الراجحي للتأمين",
+    "1810.SR": "سيرا القابضة", "1322.SR": "أملاك العالمية", "4230.SR": "البحر الأحمر", "4001.SR": "أسواق ع العثيم", 
+    "2050.SR": "صافولا", "2170.SR": "الأبحاث والإعلام", "2310.SR": "سبكيم", "2380.SR": "بترو رابغ", "2060.SR": "التصنيع", 
+    "3020.SR": "أسمنت اليمامة", "4030.SR": "البحري", "4200.SR": "الدريس", "4260.SR": "المواساة", "4342.SR": "جدوى ريت",
+    "4344.SR": "الرياض ريت", "8010.SR": "التعاونية", "8210.SR": "بوبا العربية", "8300.SR": "الوطنية", "4003.SR": "الإنماء",
+    
     # أمريكي
-    "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet", "AMZN": "Amazon", 
-    "TSLA": "Tesla", "NVDA": "NVIDIA", "META": "Meta", "NFLX": "Netflix", 
-    "AMD": "AMD", "INTC": "Intel", "JPM": "JPMorgan", "V": "Visa", "WMT": "Walmart", "DIS": "Disney",
-    "ORCL": "Oracle", "CRM": "Salesforce", "ADBE": "Adobe", "AVGO": "Broadcom", "QCOM": "Qualcomm",
-    "BAC": "Bank of America", "GS": "Goldman Sachs", "MA": "Mastercard", "PYPL": "PayPal",
-    "COST": "Costco", "NKE": "Nike", "SBUX": "Starbucks", "MCD": "McDonald's",
-    "JNJ": "Johnson & Johnson", "UNH": "UnitedHealth", "PFE": "Pfizer", "LLY": "Eli Lilly",
-    "XOM": "Exxon Mobil", "CVX": "Chevron", "BA": "Boeing", "PLTR": "Palantir",
-    
-    # 🌟 سعودي (تم إضافة العشرات من أهم الأسهم)
-    "2222.SR": "أرامكو", "2010.SR": "سابك", "1120.SR": "الراجحي", "1180.SR": "الأهلي", 
-    "2350.SR": "كيان", "1211.SR": "معادن", "4013.SR": "دله الصحية", "7010.SR": "الاتصالات",
-    "4300.SR": "دار الأركان", "2280.SR": "المراعي", "7020.SR": "موبايلي", "7030.SR": "زين",
-    "4014.SR": "علم", "1111.SR": "تداول", "4015.SR": "الدوائية", "4002.SR": "المواساة",
-    "4004.SR": "الحبيب", "4161.SR": "بن داود", "4192.SR": "لجام", "7203.SR": "طيران ناس",
-    "2082.SR": "أكوا باور", "6018.SR": "نادك", "4191.SR": "أم القرى", "8230.SR": "الراجحي للتأمين",
-    "1810.SR": "سيرا القابضة", "1322.SR": "أملاك العالمية", "4230.SR": "البحر الأحمر",
-    "4001.SR": "أسواق ع العثيم", "2050.SR": "صافولا", "2170.SR": "الأبحاث والإعلام",
-    "2310.SR": "سبكيم", "2380.SR": "بترو رابغ", "2060.SR": "التصنيع", "3020.SR": "أسمنت اليمامة",
-    "4030.SR": "البحري", "4200.SR": "الدريس", "4260.SR": "المواساة", "4342.SR": "جدوى ريت",
-    "4344.SR": "الرياض ريت", "8010.SR": "التعاونية", "8210.SR": "بوبا العربية", "8300.SR": "الوطنية",
-    
+    "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet", "AMZN": "Amazon", "TSLA": "Tesla", 
+    "NVDA": "NVIDIA", "META": "Meta", "NFLX": "Netflix", "AMD": "AMD", "INTC": "Intel", "JPM": "JPMorgan", 
+    "V": "Visa", "WMT": "Walmart", "DIS": "Disney", "ORCL": "Oracle", "CRM": "Salesforce", "ADBE": "Adobe", 
+    "AVGO": "Broadcom", "QCOM": "Qualcomm", "BAC": "Bank of America", "GS": "Goldman Sachs", "MA": "Mastercard", 
+    "PYPL": "PayPal", "COST": "Costco", "NKE": "Nike", "SBUX": "Starbucks", "MCD": "McDonald's",
+    "JNJ": "Johnson & Johnson", "UNH": "UnitedHealth", "PFE": "Pfizer", "LLY": "Eli Lilly", "XOM": "Exxon Mobil", 
+    "CVX": "Chevron", "BA": "Boeing", "PLTR": "Palantir", "IBM": "IBM", "GE": "General Electric", "CAT": "Caterpillar",
+
     # مصري
     "COMI.CA": "البنك التجاري", "EFIH.CA": "إي فاينانس", "HRHO.CA": "هيرميس", "ETEL.CA": "المصرية للاتصالات", 
-    "SWDY.CA": "السويدي", "EAST.CA": "الشرقية إيسترن", "TMGH.CA": "طلعت مصطفى", "ABUK.CA": "أبو قير", "SKPC.CA": "سيدي كرير", "ORAS.CA": "أوراسكوم",
+    "SWDY.CA": "السويدي", "EAST.CA": "الشرقية إيسترن", "TMGH.CA": "طلعت مصطفى", "ABUK.CA": "أبو قير", "SKPC.CA": "سيدي كرير", 
 }
 
 MARKETS = {
-    "🇺🇸 أمريكي (US)": "us",
-    "🇸🇦 سعودي (Tadawul)": "sa",
-    "🇪🇬 مصري (EGX)": "eg",
+    "🇸🇦 سعودي (Tadawul)": SAUDI_TICKERS,
+    "🇺🇸 أمريكي (US)": US_TICKERS,
+    "🇪🇬 مصري (EGX)": EGYPT_TICKERS,
 }
-
-SA_TICKERS = [f"{i}.SR" for i in range(1000, 4500)]
-EG_TICKERS = ["COMI.CA", "EFIH.CA", "HRHO.CA", "ETEL.CA", "SWDY.CA", "EAST.CA", "TMGH.CA", "ABUK.CA", "SKPC.CA", "ORAS.CA"]
 
 INDICES = {
     "📈 S&P 500": "^GSPC", "📈 Dow Jones": "^DJI", "📈 NASDAQ": "^IXIC", 
-    "📈 TASI (تاسي)": "^TASI.SR", "📈 EGX 30": "^EGX30.CA",
-    "💱 USD/EGP": "EGP=X", "💱 USD/SAR": "SAR=X",
+    "📈 TASI (تاسي)": "^TASI.SR", "📈 EGX 30": "^EGX30.CA"
 }
 
 TIMEFRAMES = {
@@ -109,6 +126,9 @@ TIMEFRAMES = {
     "1d": {"interval": "1d", "period": "5y"}, "1wk": {"interval": "1wk", "period": "5y"},
 }
 
+# ==========================================
+# 3. الدوال الأساسية
+# ==========================================
 @st.cache_data(ttl=60)
 def fetch_data(ticker, interval, period):
     try:
@@ -134,9 +154,7 @@ def get_liquidity_info(ticker):
         ask = info.get('ask', 0)
         price = info.get('currentPrice', info.get('regularMarketPrice', 1))
         
-        if bid == 0 or ask == 0:
-            return "غير متاح حالياً", 0.0, "#888"
-
+        if bid == 0 or ask == 0: return "غير متاح حالياً", 0.0, "#888"
         spread_pct = ((ask - bid) / price) * 100
         
         if vol > 5_000_000 and spread_pct < 0.1: status, color = "عالية جداً", "#00c853"
@@ -152,6 +170,7 @@ def fetch_news(ticker):
         return [n['title'] for n in news[:2]] if news else []
     except: return []
 
+# 🌟 محرك التحليل الجديد (يركز على الاختراق والسيولة)
 def calculate_multi_factor(df):
     if df.empty or len(df) < 50: 
         return 50, "بيانات غير كافية", "محايد", 0, 0, 0, "لا توجد بيانات كافية"
@@ -165,19 +184,20 @@ def calculate_multi_factor(df):
     current_price = close.iloc[-1]
     atr = (high - low).rolling(14).mean().iloc[-1]
 
+    # الاتجاه
     try:
-        sma20, sma50, sma200 = close.rolling(20).mean().iloc[-1], close.rolling(50).mean().iloc[-1], close.rolling(200).mean().iloc[-1] if len(close) >= 200 else close.rolling(50).mean().iloc[-1]
-        if current_price > sma20 > sma50 > sma200: p_trend += 10; reasons.append("اتجاه صاعد قوي")
-        elif current_price < sma20 < sma50 < sma200: p_trend -= 10; reasons.append("اتجاه هابط قوي")
+        sma20, sma50 = close.rolling(20).mean().iloc[-1], close.rolling(50).mean().iloc[-1]
+        if current_price > sma20 and sma20 > sma50: p_trend += 10; reasons.append("اتجاه صاعد")
+        elif current_price < sma20 and sma20 < sma50: p_trend -= 10; reasons.append("اتجاه هابط")
     except: pass
 
+    # الزخم
     try:
         delta = close.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rsi = 100 - (100 / (1 + (gain / loss))).iloc[-1]
         if 50 <= rsi < 70: p_mom += 5; reasons.append("زخم إيجابي")
-        elif rsi <= 30: p_mom += 5; reasons.append("تشبع بيعي")
         
         macd = close.ewm(span=12, adjust=False).mean() - close.ewm(span=26, adjust=False).mean()
         signal = macd.ewm(span=9, adjust=False).mean()
@@ -185,29 +205,25 @@ def calculate_multi_factor(df):
         else: p_mom -= 5; reasons.append("MACD سلبي")
     except: pass
 
+    # 🌟 الاختراق السعري (السر اللي بيكشف سيرا والبحر الأحمر)
     try:
         recent_high = high.tail(20).max()
         if current_price >= recent_high * 0.99: 
-            p_breakout = 20
+            p_breakout = 30 # وزنه عالي جداً
             reasons.append("اختراق سعري قوي")
     except: pass
 
+    # 🌟 انفجار السيولة (التأكيد)
     try:
         avg_vol = volume.rolling(20).mean().iloc[-1]
         if volume.iloc[-1] > avg_vol * 1.5:
-            p_vol_spike = 15
+            p_vol_spike = 20
             reasons.append("سيولة عالية جداً")
-    except: pass
-
-    try:
-        obv = (np.sign(close.diff()) * volume).fillna(0).cumsum()
-        if obv.iloc[-1] > obv.rolling(20).mean().iloc[-1]: p_obv += 5; reasons.append("تدفق أموال إيجابي")
-        else: p_obv -= 5; reasons.append("تدفق أموال سلبي")
     except: pass
 
     score += (p_trend + p_mom + p_vol + p_obv + p_candle + p_breakout + p_vol_spike)
     score = max(0, min(100, score))
-    breakdown_str = f"اختراق: {p_breakout:+} | سيولة: {p_vol_spike:+} | اتجاه: {p_trend:+} | زخم: {p_mom:+} | تدفق: {p_obv:+}"
+    breakdown_str = f"اختراق: {p_breakout:+} | سيولة: {p_vol_spike:+} | اتجاه: {p_trend:+} | زخم: {p_mom:+}"
     
     if score >= 60:
         rec = "شراء (BUY)"
@@ -232,36 +248,12 @@ def get_multi_factor_score(ticker):
     df = fetch_data(ticker, "1d", "1y")
     return calculate_multi_factor(df)
 
-@st.cache_data(ttl=86400)
-def auto_fetch_tickers(market_code):
-    tickers = []
-    try:
-        q = yf.EquityQuery('eq', ['region', market_code])
-        res = yf.screen(q, size=300)
-        tickers = [item['symbol'] for item in res.get('quotes', [])]
-    except: pass
-    
-    if not tickers:
-        if market_code == 'us':
-            try:
-                url = "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv"
-                res = requests.get(url)
-                df = pd.read_csv(pd.compat.StringIO(res.text))
-                tickers = df['Symbol'].tolist()
-            except:
-                tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX"]
-        elif market_code == 'sa':
-            tickers = SA_TICKERS[:300] 
-        elif market_code == 'eg':
-            tickers = EG_TICKERS
-
-    return list(set(tickers))
-
+# 🌟 تقييم القوائم دفعة واحدة (Bulk)
 @st.cache_data(ttl=600)
 def bulk_evaluate_tickers(tickers):
     if not tickers: return {}
     scores = {}
-    chunk_size = 20
+    chunk_size = 15 # تقليل الحجم عشان السيرفر ميهنجش
     for i in range(0, len(tickers), chunk_size):
         chunk = tickers[i:i+chunk_size]
         try:
@@ -280,51 +272,28 @@ def bulk_evaluate_tickers(tickers):
         except: pass
     return scores
 
-# 🌟 دالة لجلب اسم السهم لو مش موجود في القاموس
-@st.cache_data(ttl=86400)
-def get_ticker_name(ticker):
-    if ticker in COMPANY_NAMES:
-        return COMPANY_NAMES[ticker]
-    try:
-        info = yf.Ticker(ticker).info
-        name = info.get('shortName') or info.get('longName')
-        if name and name != ticker:
-            COMPANY_NAMES[ticker] = name # نحفظه عشان المرة الجاية
-            return name
-    except: pass
-    return ticker
-
 @st.cache_data(ttl=600)
 def get_options_recommendation(ticker, current_price, general_rec, atr):
     try:
         stock = yf.Ticker(ticker)
         expirations = stock.options
         if expirations:
-            chain = None
-            target_exp = None
-            for exp in expirations[:3]:
-                try:
-                    temp_chain = stock.option_chain(exp)
-                    if not temp_chain.calls.empty and not temp_chain.puts.empty:
-                        chain = temp_chain
-                        target_exp = exp
-                        break
-                except: continue
-                    
-            if chain is not None:
-                calls, puts = chain.calls, chain.puts
+            chain = stock.option_chain(expirations[0])
+            calls, puts = chain.calls, chain.puts
+            if not calls.empty and not puts.empty:
                 chosen = calls.loc[abs(calls['strike'] - current_price).idxmin()] if "شراء" in general_rec else puts.loc[abs(puts['strike'] - current_price).idxmin()]
                 last_price = chosen['lastPrice']
                 if last_price > 0:
                     return {
                         "type": "Call (ATM)" if "شراء" in general_rec else "Put (ATM)", 
-                        "expiration": target_exp, "strike": chosen['strike'],
+                        "expiration": expirations[0], "strike": chosen['strike'],
                         "last_price": last_price, "stop_loss": last_price * 0.80, 
                         "session_target": last_price * 1.30, "expiry_target": last_price * 2.00,  
                         "change": chosen.get('change', 0), "is_estimated": False
                     }
     except: pass
     
+    # سعر تقديري لو السيرفر رافض
     est_exp = (datetime.date.today() + datetime.timedelta(days=30)).strftime("%Y-%m-%d")
     est_price = round(current_price * 0.02, 2)
     est_strike = round(current_price * 1.02, 2) if "شراء" in general_rec else round(current_price * 0.98, 2)
@@ -338,7 +307,7 @@ def get_options_recommendation(ticker, current_price, general_rec, atr):
     }
 
 # ==========================================
-# 3. تقسيم الشاشة
+# 4. تقسيم الشاشة والعرض
 # ==========================================
 col_chart, col_sidebar = st.columns([2.5, 1], gap="medium")
 
@@ -355,27 +324,21 @@ with col_chart:
         selected_ticker_display = st.selectbox("المؤشر", ticker_options, index=0, label_visibility="collapsed")
         selected_ticker = INDICES[selected_ticker_display]
     else:
-        market_code = MARKETS[selected_market]
-        with st.spinner("جاري جلب وتحليل كل أسهم السوق تلقائياً..."):
-            all_tickers = auto_fetch_tickers(market_code)
-            stock_scores_dict = bulk_evaluate_tickers(all_tickers)
+        tickers_list = MARKETS[selected_market]
+        with st.spinner("جاري تقييم وترتيب الأسهم..."):
+            stock_scores_dict = bulk_evaluate_tickers(tickers_list)
                 
         sorted_tickers = sorted(stock_scores_dict.keys(), key=lambda x: stock_scores_dict.get(x, 0), reverse=True)
         
         def format_ticker(t):
             s = stock_scores_dict.get(t, 50)
-            name = get_ticker_name(t) # استخدام الدالة الجديدة لجلب الاسم
+            name = COMPANY_NAMES.get(t, t)
             if s >= 60: emoji = "🟢"
             elif s <= 40: emoji = "🔴"
             else: emoji = "🟡"
             return f"{emoji} {name} ({t}) - {s}"
         
-        selected_ticker = st.selectbox(
-            "اختر السهم:", 
-            sorted_tickers, 
-            format_func=format_ticker, 
-            label_visibility="collapsed"
-        )
+        selected_ticker = st.selectbox("اختر السهم:", sorted_tickers, format_func=format_ticker, label_visibility="collapsed")
 
     tf_config = TIMEFRAMES[selected_timeframe]
     df = fetch_data(selected_ticker, tf_config["interval"], tf_config["period"])
@@ -385,13 +348,12 @@ with col_chart:
         prev_close = df['Close'].iloc[-2].item()
         change = current_price - prev_close
         change_pct = (change / prev_close) * 100
-        
         atr = (df['High'] - df['Low']).rolling(14).mean().iloc[-1]
 
         color = "#00c853" if change >= 0 else "#ff3d00"
         sign = "+" if change >= 0 else ""
         
-        company_name = get_ticker_name(selected_ticker)
+        company_name = COMPANY_NAMES.get(selected_ticker, selected_ticker)
         st.markdown(f"""
         <div class="top-bar">
             <span class="ticker-name">{company_name} · {selected_ticker} · {selected_timeframe}</span>
@@ -405,12 +367,7 @@ with col_chart:
         df_plot['SMA_50'] = df['Close'].rolling(window=50).mean().tail(100)
 
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.8, 0.2])
-        
-        fig.add_trace(go.Candlestick(
-            x=df_plot.index, open=df_plot['Open'], high=df_plot['High'], low=df_plot['Low'], close=df_plot['Close'], name="Price",
-            increasing_line_color='#089981', decreasing_line_color='#f23645'
-        ), row=1, col=1)
-        
+        fig.add_trace(go.Candlestick(x=df_plot.index, open=df_plot['Open'], high=df_plot['High'], low=df_plot['Low'], close=df_plot['Close'], name="Price", increasing_line_color='#089981', decreasing_line_color='#f23645'), row=1, col=1)
         fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_20'], mode='lines', name='SMA 20', line=dict(color='#ff9800', width=1.5)), row=1, col=1)
         fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_50'], mode='lines', name='SMA 50', line=dict(color='#9c27b0', width=1.5)), row=1, col=1)
         
@@ -425,7 +382,6 @@ with col_chart:
             yaxis=dict(showgrid=True, gridcolor='#2a2e39', side='right', fixedrange=False)
         )
         fig.update_yaxes(showgrid=False, side='right', row=2, col=1, fixedrange=False)
-
         st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
 
 with col_sidebar:
@@ -471,7 +427,6 @@ with col_sidebar:
         if options_rec:
             opt_color = "#00c853" if options_rec['change'] >= 0 else "#ff3d00"
             opt_sign = "+" if options_rec['change'] >= 0 else ""
-            
             warning_html = '<div class="estimate-warning">⚠️ سعر تقديري (السيرفر مش راجع بيانات حقيقية)</div>' if options_rec.get('is_estimated') else ""
             
             st.markdown(f"""
