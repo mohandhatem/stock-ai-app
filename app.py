@@ -65,7 +65,6 @@ COMPANY_NAMES = {
 
 MARKETS = {"🇸🇦 سعودي (Tadawul)": SAUDI_TICKERS, "🇺🇸 أمريكي (US)": US_TICKERS, "🇪🇬 مصري (EGX)": EGYPT_TICKERS}
 
-# تحديث الفريمات
 TIMEFRAMES = {
     "1m": {"interval": "1m", "period": "7d"},
     "5m": {"interval": "5m", "period": "60d"},
@@ -78,7 +77,7 @@ TIMEFRAMES = {
 # ==========================================
 # 3. دوال التحليل
 # ==========================================
-@st.cache_data(ttl=60) # قللنا الكاش لـ دقيقة عشان البيانات تتحدث أسرع
+@st.cache_data(ttl=60)
 def fetch_data(ticker, interval, period):
     try:
         df = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
@@ -156,26 +155,29 @@ def analyze_stock(df, ticker):
     score = max(10, min(95, score))
     breakdown.append(f"<b>الإجمالي: {score}%</b>")
     
-    if score >= 70 and is_above_mas:
-        rec = "شراء قوي (STRONG BUY)"
-        intraday_target = current_price + (atr * 1.0)
-        swing_target = current_price + (atr * 3.0)
-        stop_loss = current_price - (atr * 1.5)
-    elif score >= 55 and is_above_mas:
-        rec = "شراء (BUY)"
-        intraday_target = current_price + (atr * 0.5)
-        swing_target = current_price + (atr * 2.0)
-        stop_loss = current_price - (atr * 1.5)
-    elif score <= 30 and is_below_mas:
-        rec = "بيع قوي (STRONG SELL)"
-        intraday_target = current_price - (atr * 1.0)
-        swing_target = current_price - (atr * 3.0)
-        stop_loss = current_price + (atr * 1.5)
-    elif score <= 45 and is_below_mas:
-        rec = "بيع (SELL)"
-        intraday_target = current_price - (atr * 0.5)
-        swing_target = current_price - (atr * 2.0)
-        stop_loss = current_price + (atr * 1.5)
+    # 🌟 ضبط التوصيات عشان تطابق اللون
+    if score >= 65:
+        if is_above_mas:
+            rec = "شراء قوي (STRONG BUY)"
+            intraday_target = current_price + (atr * 1.0)
+            swing_target = current_price + (atr * 3.0)
+            stop_loss = current_price - (atr * 1.5)
+        else:
+            rec = "شراء (BUY)" # تقييم عالي بس لسه مش فوق المتوسطات (ارتداد)
+            intraday_target = current_price + (atr * 0.5)
+            swing_target = current_price + (atr * 2.0)
+            stop_loss = current_price - (atr * 1.5)
+    elif score <= 40:
+        if is_below_mas:
+            rec = "بيع قوي (STRONG SELL)"
+            intraday_target = current_price - (atr * 1.0)
+            swing_target = current_price - (atr * 3.0)
+            stop_loss = current_price + (atr * 1.5)
+        else:
+            rec = "بيع (SELL)"
+            intraday_target = current_price - (atr * 0.5)
+            swing_target = current_price - (atr * 2.0)
+            stop_loss = current_price + (atr * 1.5)
     else:
         rec = "احتفاظ (HOLD)"
         intraday_target = current_price
@@ -184,16 +186,17 @@ def analyze_stock(df, ticker):
 
     return score, is_above_mas, is_below_mas, rec, intraday_target, swing_target, stop_loss, "<br>".join(breakdown)
 
+# 🌟 الدالة دي بقت بتاخد الفريم وتحدث البيانات بناءً عليه
 @st.cache_data(ttl=600)
-def evaluate_tickers(tickers):
+def evaluate_tickers(tickers, interval, period):
     results = {}
     for t in tickers:
         try:
-            df = fetch_data(t, "1d", "1y")
+            df = fetch_data(t, interval, period)
             if len(df) < 50: continue
             score, is_above_mas, is_below_mas, rec, _, _, _, _ = analyze_stock(df, t)
             results[t] = {'score': score, 'is_above_mas': is_above_mas, 'is_below_mas': is_below_mas, 'rec': rec}
-            time.sleep(0.1)
+            time.sleep(0.1) # تأخير لتجنب الحظر
         except: pass
     return results
 
@@ -210,12 +213,15 @@ with col_chart:
     with c2:
         filter_mode = st.selectbox("الفلتر", ["الكل ⚖️", "إيجابي (فوق المتوسطات) 🚀", "سلبي (تحت المتوسطات) 🔻"], label_visibility="collapsed")
     with c3:
-        selected_timeframe = st.selectbox("الإطار", list(TIMEFRAMES.keys()), index=0, label_visibility="collapsed")
+        # 🌟 بدأنا بـ 30m كافتراضي
+        selected_timeframe = st.selectbox("الإطار", list(TIMEFRAMES.keys()), index=3, label_visibility="collapsed")
 
     tickers_list = MARKETS[selected_market]
+    tf_config = TIMEFRAMES[selected_timeframe]
     
-    with st.spinner("جاري فلترة وتحليل الأسهم..."):
-        eval_data = evaluate_tickers(tickers_list)
+    # 🌟 بنحدث البيانات بناءً على الفريم المختار
+    with st.spinner(f"جاري تحديث بيانات السوق بناءً على فريم {selected_timeframe}..."):
+        eval_data = evaluate_tickers(tickers_list, tf_config["interval"], tf_config["period"])
 
     if filter_mode == "إيجابي (فوق المتوسطات) 🚀":
         filtered_tickers = [t for t, data in eval_data.items() if data['is_above_mas']]
@@ -227,7 +233,7 @@ with col_chart:
     filtered_tickers = sorted(filtered_tickers, key=lambda x: eval_data[x]['score'], reverse=True)
 
     if not filtered_tickers:
-        st.warning(f"لا توجد أسهم تتطابق مع الفلتر المختار ({filter_mode}) حالياً.")
+        st.warning(f"لا توجد أسهم تتطابق مع الفلتر المختار ({filter_mode}) على فريم {selected_timeframe} حالياً.")
         st.stop()
 
     def format_ticker(t):
@@ -240,11 +246,8 @@ with col_chart:
     selected_ticker = st.selectbox("اختر السهم:", filtered_tickers, format_func=format_ticker, label_visibility="collapsed")
 
     # --- رسم الشارت ---
-    tf_config = TIMEFRAMES[selected_timeframe]
-    
-    # 🌟 هنا التحديث الفوري: كل ما تغير الفريم، بيجيب الداتا من جديد ويظهر Spinner
-    with st.spinner(f"جاري تحديث بيانات {selected_ticker} لفريم {selected_timeframe}..."):
-        df = fetch_data(selected_ticker, tf_config["interval"], tf_config["period"])
+    # بنجيب بيانات السهم المختار على نفس الفريم
+    df = fetch_data(selected_ticker, tf_config["interval"], tf_config["period"])
 
     if not df.empty:
         current_price = df['Close'].iloc[-1].item()
