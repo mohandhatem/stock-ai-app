@@ -65,12 +65,26 @@ US_TICKERS = [
     "COIN", "HOOD", "SOFI", "AI", "PATH", "NET", "DDOG", "CRWD", "OKTA", "PANW"
 ]
 
+# 🌟 ضفنا تاسي و S&P 500 بأسماء واضحة
 INDICES = {
-    "S&P 500": "^GSPC", "Dow Jones": "^DJI", "NASDAQ": "^IXIC", 
-    "Russell 2000": "^RUT", "VIX (التقلب)": "^VIX"
+    "S&P 500": "^GSPC", 
+    "NASDAQ": "^IXIC", 
+    "Dow Jones": "^DJI", 
+    "Russell 2000": "^RUT", 
+    "VIX (التقلب)": "^VIX",
+    "TASI (تاسي)": "^TASI.SR"
 }
 
 COMPANY_NAMES = {
+    # 🌟 أسماء المؤشرات
+    "^GSPC": "S&P 500", 
+    "^IXIC": "NASDAQ", 
+    "^DJI": "Dow Jones", 
+    "^RUT": "Russell 2000", 
+    "^VIX": "VIX", 
+    "^TASI.SR": "TASI (تاسي)",
+
+    # أسماء الأسهم الأمريكية
     "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet", "AMZN": "Amazon", "TSLA": "Tesla", 
     "NVDA": "NVIDIA", "META": "Meta", "NFLX": "Netflix", "AMD": "AMD", "INTC": "Intel", 
     "JPM": "JPMorgan", "V": "Visa", "WMT": "Walmart", "DIS": "Disney", "ORCL": "Oracle", 
@@ -107,7 +121,6 @@ TIMEFRAMES = {
 @st.cache_data(ttl=60)
 def fetch_data(ticker, interval, period):
     try:
-        # استخدام ticker.history بدلاً من download لضمان استقرار البيانات
         df = yf.Ticker(ticker).history(period=period, interval=interval, auto_adjust=True)
         if df.empty:
             df = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
@@ -256,7 +269,8 @@ with col_chart:
     tf_config = TIMEFRAMES[selected_timeframe]
 
     if selected_market == "📊 المؤشرات (Indices)":
-        ticker_symbols = [INDICES[k] for k in INDICES]
+        # بناخد الرموز من القاموس
+        ticker_symbols = list(INDICES.values())
         custom_ticker = st.text_input("أو اكتب رمز المؤشر يدوياً (مثال: ^GSPC):", "").strip().upper()
     else:
         ticker_symbols = US_TICKERS
@@ -272,19 +286,27 @@ with col_chart:
     else:
         filtered_tickers = ticker_symbols
 
-    # 🌟 لو الفلتر ملقاش حاجة، بنعرض كل الأسهم كاحتياطي عشان الأداة متقفلش
     if not filtered_tickers:
         st.warning(f"لا توجد أسهم تتطابق مع الفلتر المختار ({filter_mode}) على فريم {selected_timeframe}. تم عرض كل الأسهم بدلاً من ذلك.")
         filtered_tickers = ticker_symbols
 
     filtered_tickers = sorted(filtered_tickers, key=lambda x: eval_data.get(x, {}).get('score', 0), reverse=True)
 
+    # 🌟 هنا الفورمات اللي بيجيب الاسم الحقيقي من COMPANY_NAMES
     def format_ticker(t):
         data = eval_data.get(t, {'is_above_mas': False, 'is_below_mas': False, 'score': 50})
         if data.get('is_above_mas'): prefix = "🚀"
         elif data.get('is_below_mas'): prefix = "🔻"
         else: prefix = "⚖️"
-        return f"{prefix} {COMPANY_NAMES.get(t, t)} ({t}) - {data.get('score', 50)}%"
+        
+        # لو السهم في القاموس، بيجيب اسمه، لو لأ بيجيب الرمز
+        display_name = COMPANY_NAMES.get(t, t) 
+        
+        # لو الاسم هو نفسه الرمز، منكتبهوش مرتين
+        if display_name == t:
+            return f"{prefix} {t} - {data.get('score', 50)}%"
+        else:
+            return f"{prefix} {display_name} ({t}) - {data.get('score', 50)}%"
 
     selected_ticker = st.selectbox("اختر السهم:", filtered_tickers, format_func=format_ticker, label_visibility="collapsed")
 
@@ -303,9 +325,11 @@ with col_chart:
             color = "#00c853" if change >= 0 else "#ff3d00"
             sign = "+" if change >= 0 else ""
 
+            # هنا في الهيدر بنجيب الاسم الحقيقي
+            display_name_header = COMPANY_NAMES.get(selected_ticker, selected_ticker)
             st.markdown(f"""
             <div class="top-bar">
-                <span class="ticker-name">{COMPANY_NAMES.get(selected_ticker, selected_ticker)} · {selected_ticker} · {selected_timeframe}</span>
+                <span class="ticker-name">{display_name_header} · {selected_ticker} · {selected_timeframe}</span>
                 <span class="ohlc-data">C {current_price:.2f}</span>
                 <span class="{'green-text' if change >= 0 else 'red-text'}" style="font-weight:bold;">{sign}{change:.2f} ({sign}{change_pct:.2f}%)</span>
             </div>
@@ -362,6 +386,7 @@ with col_sidebar:
         </div>
         """, unsafe_allow_html=True)
 
+        # عقود الخيارات للأسهم فقط
         if selected_ticker.isalpha():
             try:
                 stock = yf.Ticker(selected_ticker)
