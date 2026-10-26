@@ -21,10 +21,7 @@ footer {visibility: hidden;}
 .stApp { background-color: #131722; color: #d1d4dc; }
 .block-container { padding-top: 0.5rem; padding-bottom: 1rem; max-width: 98%; }
 
-/* 🌟 CSS لمنع الكيبورد من الظهور في القائمة المنسدلة */
-div[data-baseweb="select"] input {
-    display: none !important;
-}
+div[data-baseweb="select"] input { display: none !important; }
 
 .top-bar { display: flex; align-items: center; gap: 10px; padding: 5px; font-family: sans-serif; margin-bottom: 5px; flex-wrap: wrap;}
 .ticker-name { font-size: 18px; font-weight: bold; color: #fff; }
@@ -56,9 +53,8 @@ div[data-baseweb="select"] input {
 st_autorefresh(interval=60000, limit=None, key="live_refresh")
 
 # ==========================================
-# 2. البيانات والقوائم (أمريكي ومؤشرات فقط)
+# 2. البيانات والقوائم
 # ==========================================
-# قائمة ضخمة بأقوى الأسهم الأمريكية
 US_TICKERS = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX", "AMD", "INTC", 
     "JPM", "V", "WMT", "DIS", "ORCL", "CRM", "ADBE", "AVGO", "QCOM", "BAC", 
@@ -106,14 +102,16 @@ TIMEFRAMES = {
 }
 
 # ==========================================
-# 3. دوال التحليل (مع المؤشرات الجديدة)
+# 3. دوال جلب البيانات والتحليل
 # ==========================================
 @st.cache_data(ttl=60)
 def fetch_data(ticker, interval, period):
     try:
-        df = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
-        if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(1) # Fix yfinance multiindex
-        if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
+        # استخدام ticker.history بدلاً من download لضمان استقرار البيانات
+        df = yf.Ticker(ticker).history(period=period, interval=interval, auto_adjust=True)
+        if df.empty:
+            df = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
+            if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
         return df
     except: return pd.DataFrame()
 
@@ -133,7 +131,6 @@ def analyze_stock(df, ticker):
     prev_close = close.iloc[-2]
     atr = (high - low).rolling(14).mean().iloc[-1]
 
-    # المتوسطات
     sma20 = close.rolling(20).mean().iloc[-1]
     sma30 = close.rolling(30).mean().iloc[-1]
     sma50 = close.rolling(50).mean().iloc[-1]
@@ -144,7 +141,6 @@ def analyze_stock(df, ticker):
     score = 50
     breakdown = ["نقاط البداية: 50"]
     
-    # 1. المتوسطات
     if is_above_mas:
         score += 15
         breakdown.append("فوق المتوسطات: +15")
@@ -152,7 +148,6 @@ def analyze_stock(df, ticker):
         score -= 15
         breakdown.append("تحت المتوسطات: -15")
 
-    # 2. RSI
     delta = close.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -168,7 +163,6 @@ def analyze_stock(df, ticker):
         score += 10
         breakdown.append("RSI تشبع بيعي: +10")
 
-    # 3. MACD
     macd = close.ewm(span=12, adjust=False).mean() - close.ewm(span=26, adjust=False).mean()
     signal = macd.ewm(span=9, adjust=False).mean()
     if macd.iloc[-1] > signal.iloc[-1]: 
@@ -178,7 +172,6 @@ def analyze_stock(df, ticker):
         score -= 10
         breakdown.append("MACD سلبي: -10")
 
-    # 4. Stochastic
     lowest_low = low.rolling(window=14).min()
     highest_high = high.rolling(window=14).max()
     stoch_k = 100 * ((close - lowest_low) / (highest_high - lowest_low))
@@ -191,7 +184,6 @@ def analyze_stock(df, ticker):
         score -= 5
         breakdown.append("Stochastic سلبي: -5")
 
-    # 5. Bollinger Bands
     bb_middle = close.rolling(window=20).mean()
     bb_std = close.rolling(window=20).std()
     bb_upper = bb_middle + (bb_std * 2)
@@ -204,23 +196,6 @@ def analyze_stock(df, ticker):
         score -= 10
         breakdown.append("مقاومة بولينجر: -10")
 
-    # 6. ADX (قوة الاتجاه)
-    plus_dm = high.diff()
-    minus_dm = low.diff()
-    plus_dm[plus_dm < 0] = 0
-    minus_dm[minus_dm > 0] = 0
-    tr = pd.concat([high - low, (high - close.shift()).abs(), (low - close.shift()).abs()], axis=1).max(axis=1)
-    atr_adx = tr.rolling(14).mean()
-    plus_di = 100 * (plus_dm.rolling(14).mean() / atr_adx)
-    minus_di = 100 * (minus_dm.abs().rolling(14).mean() / atr_adx)
-    dx = (plus_di - minus_di).abs() / (plus_di + minus_di) * 100
-    adx = dx.rolling(14).mean()
-    
-    if adx.iloc[-1] > 25:
-        score += 5
-        breakdown.append("اتجاه قوي ADX: +5")
-
-    # 7. الاختراق والسيولة
     if current_price >= high.tail(20).max() * 0.99: 
         score += 10
         breakdown.append("اختراق سعري: +10")
@@ -259,7 +234,7 @@ def evaluate_tickers(tickers, interval, period):
             if len(df) < 50: continue
             score, is_above_mas, is_below_mas, rec, _, _, _, _ = analyze_stock(df, t)
             results[t] = {'score': score, 'is_above_mas': is_above_mas, 'is_below_mas': is_below_mas, 'rec': rec}
-            time.sleep(0.1)
+            time.sleep(0.2) 
         except: pass
     return results
 
@@ -280,7 +255,6 @@ with col_chart:
 
     tf_config = TIMEFRAMES[selected_timeframe]
 
-    # 🌟 اختيار السهم (قائمة أو كتابة يدوية)
     if selected_market == "📊 المؤشرات (Indices)":
         ticker_symbols = [INDICES[k] for k in INDICES]
         custom_ticker = st.text_input("أو اكتب رمز المؤشر يدوياً (مثال: ^GSPC):", "").strip().upper()
@@ -288,74 +262,75 @@ with col_chart:
         ticker_symbols = US_TICKERS
         custom_ticker = st.text_input("أو اكتب رمز السهم يدوياً (مثال: AAPL, TSLA):", "").strip().upper()
 
-    with st.spinner(f"جاري تحديث بيانات السوق بناءً على فريم {selected_timeframe}..."):
+    with st.spinner(f"جاري تحديث البيانات بناءً على فريم {selected_timeframe}..."):
         eval_data = evaluate_tickers(ticker_symbols, tf_config["interval"], tf_config["period"])
 
     if filter_mode == "إيجابي (فوق المتوسطات) 🚀":
-        filtered_tickers = [t for t, data in eval_data.items() if data['is_above_mas']]
+        filtered_tickers = [t for t in ticker_symbols if eval_data.get(t, {}).get('is_above_mas', False)]
     elif filter_mode == "سلبي (تحت المتوسطات) 🔻":
-        filtered_tickers = [t for t, data in eval_data.items() if data['is_below_mas']]
+        filtered_tickers = [t for t in ticker_symbols if eval_data.get(t, {}).get('is_below_mas', False)]
     else:
-        filtered_tickers = list(eval_data.keys())
+        filtered_tickers = ticker_symbols
 
-    filtered_tickers = sorted(filtered_tickers, key=lambda x: eval_data[x]['score'], reverse=True)
+    # 🌟 لو الفلتر ملقاش حاجة، بنعرض كل الأسهم كاحتياطي عشان الأداة متقفلش
+    if not filtered_tickers:
+        st.warning(f"لا توجد أسهم تتطابق مع الفلتر المختار ({filter_mode}) على فريم {selected_timeframe}. تم عرض كل الأسهم بدلاً من ذلك.")
+        filtered_tickers = ticker_symbols
 
-    if not filtered_tickers and not custom_ticker:
-        st.warning(f"لا توجد أسهم تتطابق مع الفلتر المختار ({filter_mode}) على فريم {selected_timeframe} حالياً.")
-        st.stop()
+    filtered_tickers = sorted(filtered_tickers, key=lambda x: eval_data.get(x, {}).get('score', 0), reverse=True)
 
     def format_ticker(t):
-        data = eval_data.get(t, {'is_above_mas': False, 'is_below_mas': False})
-        if data['is_above_mas']: prefix = "🚀"
-        elif data['is_below_mas']: prefix = "🔻"
+        data = eval_data.get(t, {'is_above_mas': False, 'is_below_mas': False, 'score': 50})
+        if data.get('is_above_mas'): prefix = "🚀"
+        elif data.get('is_below_mas'): prefix = "🔻"
         else: prefix = "⚖️"
-        return f"{prefix} {COMPANY_NAMES.get(t, t)} ({t})"
+        return f"{prefix} {COMPANY_NAMES.get(t, t)} ({t}) - {data.get('score', 50)}%"
 
-    # لو المستخدم كتب سهم يدوي، نستخدمه، غير كده نستخدم القائمة
+    selected_ticker = st.selectbox("اختر السهم:", filtered_tickers, format_func=format_ticker, label_visibility="collapsed")
+
     if custom_ticker:
         selected_ticker = custom_ticker
-    else:
-        selected_ticker = st.selectbox("اختر السهم:", filtered_tickers, format_func=format_ticker, label_visibility="collapsed")
 
     # --- رسم الشارت ---
-    df = fetch_data(selected_ticker, tf_config["interval"], tf_config["period"])
+    if selected_ticker:
+        df = fetch_data(selected_ticker, tf_config["interval"], tf_config["period"])
 
-    if not df.empty:
-        current_price = df['Close'].iloc[-1].item()
-        prev_close = df['Close'].iloc[-2].item()
-        change = current_price - prev_close
-        change_pct = (change / prev_close) * 100
-        color = "#00c853" if change >= 0 else "#ff3d00"
-        sign = "+" if change >= 0 else ""
+        if not df.empty:
+            current_price = df['Close'].iloc[-1].item()
+            prev_close = df['Close'].iloc[-2].item()
+            change = current_price - prev_close
+            change_pct = (change / prev_close) * 100
+            color = "#00c853" if change >= 0 else "#ff3d00"
+            sign = "+" if change >= 0 else ""
 
-        st.markdown(f"""
-        <div class="top-bar">
-            <span class="ticker-name">{COMPANY_NAMES.get(selected_ticker, selected_ticker)} · {selected_ticker} · {selected_timeframe}</span>
-            <span class="ohlc-data">C {current_price:.2f}</span>
-            <span class="{'green-text' if change >= 0 else 'red-text'}" style="font-weight:bold;">{sign}{change:.2f} ({sign}{change_pct:.2f}%)</span>
-        </div>
-        """, unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="top-bar">
+                <span class="ticker-name">{COMPANY_NAMES.get(selected_ticker, selected_ticker)} · {selected_ticker} · {selected_timeframe}</span>
+                <span class="ohlc-data">C {current_price:.2f}</span>
+                <span class="{'green-text' if change >= 0 else 'red-text'}" style="font-weight:bold;">{sign}{change:.2f} ({sign}{change_pct:.2f}%)</span>
+            </div>
+            """, unsafe_allow_html=True)
 
-        df_plot = df.tail(100).copy()
-        df_plot['SMA_20'] = df['Close'].rolling(window=20).mean().tail(100)
-        df_plot['SMA_30'] = df['Close'].rolling(window=30).mean().tail(100)
-        df_plot['SMA_50'] = df['Close'].rolling(window=50).mean().tail(100)
+            df_plot = df.tail(100).copy()
+            df_plot['SMA_20'] = df['Close'].rolling(window=20).mean().tail(100)
+            df_plot['SMA_30'] = df['Close'].rolling(window=30).mean().tail(100)
+            df_plot['SMA_50'] = df['Close'].rolling(window=50).mean().tail(100)
 
-        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.8, 0.2])
-        fig.add_trace(go.Candlestick(x=df_plot.index, open=df_plot['Open'], high=df_plot['High'], low=df_plot['Low'], close=df_plot['Close'], name="Price", increasing_line_color='#089981', decreasing_line_color='#f23645'), row=1, col=1)
-        
-        fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_20'], mode='lines', name='SMA 20', line=dict(color='#ff9800', width=1.5)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_30'], mode='lines', name='SMA 30', line=dict(color='#2196f3', width=1.5)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_50'], mode='lines', name='SMA 50', line=dict(color='#9c27b0', width=1.5)), row=1, col=1)
-        
-        colors = ['#089981' if close >= open else '#f23645' for open, close in zip(df_plot['Open'], df_plot['Close'])]
-        fig.add_trace(go.Bar(x=df_plot.index, y=df_plot['Volume'], name="Volume", marker_color=colors), row=2, col=1)
-        fig.update_layout(template="plotly_dark", paper_bgcolor='#131722', plot_bgcolor='#131722', height=400, autosize=True, margin=dict(l=5, r=5, t=5, b=5), showlegend=False, dragmode="pan", hovermode="x unified", uirevision='constant', xaxis=dict(showgrid=True, gridcolor='#2a2e39', fixedrange=False), yaxis=dict(showgrid=True, gridcolor='#2a2e39', side='right', fixedrange=False))
-        fig.update_yaxes(showgrid=False, side='right', row=2, col=1, fixedrange=False)
-        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
+            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.8, 0.2])
+            fig.add_trace(go.Candlestick(x=df_plot.index, open=df_plot['Open'], high=df_plot['High'], low=df_plot['Low'], close=df_plot['Close'], name="Price", increasing_line_color='#089981', decreasing_line_color='#f23645'), row=1, col=1)
+            
+            fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_20'], mode='lines', name='SMA 20', line=dict(color='#ff9800', width=1.5)), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_30'], mode='lines', name='SMA 30', line=dict(color='#2196f3', width=1.5)), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_50'], mode='lines', name='SMA 50', line=dict(color='#9c27b0', width=1.5)), row=1, col=1)
+            
+            colors = ['#089981' if close >= open else '#f23645' for open, close in zip(df_plot['Open'], df_plot['Close'])]
+            fig.add_trace(go.Bar(x=df_plot.index, y=df_plot['Volume'], name="Volume", marker_color=colors), row=2, col=1)
+            fig.update_layout(template="plotly_dark", paper_bgcolor='#131722', plot_bgcolor='#131722', height=400, autosize=True, margin=dict(l=5, r=5, t=5, b=5), showlegend=False, dragmode="pan", hovermode="x unified", uirevision='constant', xaxis=dict(showgrid=True, gridcolor='#2a2e39', fixedrange=False), yaxis=dict(showgrid=True, gridcolor='#2a2e39', side='right', fixedrange=False))
+            fig.update_yaxes(showgrid=False, side='right', row=2, col=1, fixedrange=False)
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
 
 with col_sidebar:
-    if not df.empty:
+    if selected_ticker and not df.empty:
         score, is_above_mas, is_below_mas, recommendation, intraday_t, swing_t, stock_sl, breakdown = analyze_stock(df, selected_ticker)
         
         if score >= 60: score_color = "#00c853"
