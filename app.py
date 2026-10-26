@@ -82,6 +82,20 @@ MARKETS = {
     "🇪🇬 مصري (EGX)": "eg",
 }
 
+CURATED_TICKERS = {
+    "🇺🇸 أمريكي (US)": [
+        "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX", "AMD", "INTC", "JPM", "V", "WMT", "DIS",
+        "ORCL", "CRM", "ADBE", "AVGO", "QCOM", "BAC", "GS", "MA", "PYPL", "COST", "NKE", "SBUX", "MCD", 
+        "JNJ", "UNH", "PFE", "LLY", "XOM", "CVX", "BA", "PLTR"
+    ],
+    "🇸🇦 سعودي (Tadawul)": [
+        "2222.SR", "2010.SR", "1120.SR", "1180.SR", "2350.SR", "1211.SR", "4013.SR", "7010.SR", "4300.SR",
+        "2280.SR", "7020.SR", "7030.SR", "4014.SR", "1111.SR", "4015.SR", "4002.SR", "4004.SR", "4161.SR",
+        "4192.SR", "7203.SR", "2082.SR", "6018.SR", "4191.SR", "8230.SR"
+    ],
+    "🇪🇬 مصري (EGX)": ["COMI.CA", "EFIH.CA", "HRHO.CA", "ETEL.CA", "SWDY.CA", "EAST.CA", "TMGH.CA", "ABUK.CA", "SKPC.CA", "ORAS.CA"],
+}
+
 INDICES = {
     "📈 S&P 500": "^GSPC", "📈 Dow Jones": "^DJI", "📈 NASDAQ": "^IXIC", 
     "📈 TASI (تاسي)": "^TASI.SR", "📈 EGX 30": "^EGX30.CA",
@@ -137,9 +151,8 @@ def fetch_news(ticker):
         return [n['title'] for n in news[:2]] if news else []
     except: return []
 
-@st.cache_data(ttl=600)
-def get_multi_factor_score(ticker):
-    df = fetch_data(ticker, "1d", "1y")
+# 🌟 دالة التقييم (بتاخد DataFrame بدل ما تنزل الداتا لوحدها عشان السرعة)
+def calculate_multi_factor(df):
     if df.empty or len(df) < 50: 
         return 50, "بيانات غير كافية", "محايد", 0, 0, 0, "لا توجد بيانات كافية"
 
@@ -219,6 +232,51 @@ def get_multi_factor_score(ticker):
     return score, rec, " | ".join(reasons[:2]), intraday_target, swing_target, stop_loss, breakdown_str
 
 @st.cache_data(ttl=600)
+def get_multi_factor_score(ticker):
+    df = fetch_data(ticker, "1d", "1y")
+    return calculate_multi_factor(df)
+
+# 🌟 دالة لجلب كل أسهم السوق
+@st.cache_data(ttl=3600)
+def get_all_market_tickers(region_code):
+    try:
+        q = yf.EquityQuery('eq', ['region', region_code])
+        res = yf.screen(q, size=300) # بنجيب أكبر عدد ممكن
+        return [item['symbol'] for item in res.get('quotes', [])]
+    except:
+        return []
+
+# 🌟 دالة ذكية لتقييم كميات كبيرة من الأسهم بسرعة (Bulk Download)
+@st.cache_data(ttl=600)
+def bulk_evaluate_tickers(tickers):
+    if not tickers: return {}
+    
+    # لو القائمة كبيرة جداً، هناخد أول 200 سهم عشان ميعملش Timeout
+    tickers = tickers[:200] 
+    
+    try:
+        data = yf.download(tickers, period="1y", interval="1d", group_by='ticker', threads=True, progress=False)
+    except:
+        return {}
+        
+    scores = {}
+    for t in tickers:
+        try:
+            if isinstance(data.columns, pd.MultiIndex):
+                if t not in data.columns.levels[0]: continue
+                df = data[t].dropna()
+            else:
+                df = data.dropna()
+                
+            if len(df) < 50: continue
+            
+            score, _, _, _, _, _, _ = calculate_multi_factor(df)
+            scores[t] = score
+        except:
+            pass
+    return scores
+
+@st.cache_data(ttl=600)
 def get_options_recommendation(ticker, current_price, general_rec, atr):
     try:
         stock = yf.Ticker(ticker)
@@ -269,45 +327,38 @@ def get_options_recommendation(ticker, current_price, general_rec, atr):
 col_chart, col_sidebar = st.columns([2.5, 1], gap="medium")
 
 with col_chart:
-    market_options = list(MARKETS.keys()) + ["📊 المؤشرات (Indices)"]
-    selected_market = st.selectbox("السوق", market_options, index=0, label_visibility="collapsed")
+    c1, c2, c3 = st.columns([1.5, 1, 1])
+    with c1:
+        market_options = list(MARKETS.keys()) + ["📊 المؤشرات (Indices)"]
+        selected_market = st.selectbox("السوق", market_options, index=0, label_visibility="collapsed")
+    with c2:
+        scope = st.selectbox("النطاق", ["أهم الأسهم 🔥", "كل السوق 🌐"], label_visibility="collapsed")
+    with c3:
+        selected_timeframe = st.selectbox("الإطار", list(TIMEFRAMES.keys()), index=1, label_visibility="collapsed")
     
     if selected_market == "📊 المؤشرات (Indices)":
         ticker_options = list(INDICES.keys())
         selected_ticker_display = st.selectbox("المؤشر", ticker_options, index=0, label_visibility="collapsed")
         selected_ticker = INDICES[selected_ticker_display]
     else:
-        # جلب جميع الأسهم ديناميكياً
-        region_code = MARKETS[selected_market]
-        
-        @st.cache_data(ttl=3600)
-        def get_all_tickers(region):
-            try:
-                q = yf.EquityQuery('eq', ['region', region])
-                res = yf.screen(q)
-                return [item['symbol'] for item in res.get('quotes', [])]
-            except:
-                return []
+        if scope == "كل السوق 🌐":
+            with st.spinner("جاري جلب وتقييم كل أسهم السوق (قد يستغرق 10 ثواني)..."):
+                region_code = MARKETS[selected_market]
+                all_tickers = get_all_market_tickers(region_code)
+                if not all_tickers: all_tickers = CURATED_TICKERS[selected_market]
+                stock_scores_dict = bulk_evaluate_tickers(all_tickers)
+        else:
+            with st.spinner("جاري تقييم الأسهم المهمة..."):
+                stock_scores_dict = bulk_evaluate_tickers(CURATED_TICKERS[selected_market])
                 
-        with st.spinner("جاري جلب جميع أسهم السوق..."):
-            all_tickers = get_all_tickers(region_code)
-            
-        if not all_tickers:
-            st.error("تعذر جلب قائمة الأسهم، جرب تحديث الصفحة.")
-            st.stop()
-            
-        stock_scores_dict = {}
-        with st.spinner(f"جاري تقييم {len(all_tickers)} سهم..."):
-            for t in all_tickers:
-                time.sleep(0.05) 
-                s, _, _, _, _, _, _ = get_multi_factor_score(t)
-                stock_scores_dict[t] = s
-        
-        sorted_tickers = sorted(all_tickers, key=lambda x: stock_scores_dict.get(x, 0), reverse=True)
+        # الترتيب من الأعلى تقييماً للأقل
+        sorted_tickers = sorted(stock_scores_dict.keys(), key=lambda x: stock_scores_dict.get(x, 0), reverse=True)
+        # عرض أفضل 100 سهم فقط في القائمة عشان تبقى سريعة
+        sorted_tickers = sorted_tickers[:100] 
         
         def format_ticker(t):
             s = stock_scores_dict.get(t, 50)
-            name = COMPANY_NAMES.get(t, t) # لو مش موجود في القاموس، هيظهر الرمز نفسه
+            name = COMPANY_NAMES.get(t, t)
             if s >= 60: emoji = "🟢"
             elif s <= 40: emoji = "🔴"
             else: emoji = "🟡"
@@ -320,8 +371,6 @@ with col_chart:
             label_visibility="collapsed"
         )
 
-    selected_timeframe = st.selectbox("الإطار الزمني", list(TIMEFRAMES.keys()), index=1, label_visibility="collapsed")
-    
     tf_config = TIMEFRAMES[selected_timeframe]
     df = fetch_data(selected_ticker, tf_config["interval"], tf_config["period"])
     
