@@ -9,7 +9,7 @@ import datetime
 import time
 
 # ==========================================
-# 1. إعدادات الصفحة والتصميم
+# 1. إعدادات الصفحة والتصميم (متوافق مع الموبايل)
 # ==========================================
 st.set_page_config(page_title="Pro Trading Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
@@ -19,26 +19,36 @@ st.markdown("""
 header {visibility: hidden;}
 footer {visibility: hidden;}
 .stApp { background-color: #131722; color: #d1d4dc; }
-.block-container { padding-top: 1rem; padding-bottom: 1rem; max-width: 98%; }
-.top-bar { display: flex; align-items: center; gap: 15px; padding: 5px 10px; font-family: sans-serif; margin-bottom: 5px;}
-.ticker-name { font-size: 20px; font-weight: bold; color: #fff; }
-.ohlc-data { color: #d1d4dc; font-weight: bold; font-size: 14px;}
+.block-container { padding-top: 0.5rem; padding-bottom: 1rem; max-width: 98%; }
+
+.top-bar { display: flex; align-items: center; gap: 10px; padding: 5px; font-family: sans-serif; margin-bottom: 5px; flex-wrap: wrap;}
+.ticker-name { font-size: 18px; font-weight: bold; color: #fff; }
+.ohlc-data { color: #d1d4dc; font-weight: bold; font-size: 12px;}
 .green-text { color: #089981; }
 .red-text { color: #f23645; }
-.side-card { background-color: #1e222d; border: 1px solid #2a2e39; border-radius: 8px; padding: 15px; margin-bottom: 15px;}
+
+.side-card { background-color: #1e222d; border: 1px solid #2a2e39; border-radius: 8px; padding: 12px; margin-bottom: 12px;}
 .live-card { border-left: 4px solid #ff9800; }
 .options-card { border-left: 4px solid #00bcd4; }
 .liquidity-card { border-left: 4px solid #e91e63; }
 .general-card { border-left: 4px solid #00c853; }
-.card-title { color: #d1d4dc; font-size: 14px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #2a2e39; padding-bottom: 5px;}
-.price-text { font-size: 22px; font-weight: bold; margin: 0; }
-.pre-market-text { font-size: 13px; color: #ff9800; font-weight: bold; margin: 0; margin-top: 2px;}
-.change-text { font-size: 13px; margin: 0; margin-bottom: 10px;}
-.rec-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;}
+.card-title { color: #d1d4dc; font-size: 13px; font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #2a2e39; padding-bottom: 5px;}
+.price-text { font-size: 20px; font-weight: bold; margin: 0; }
+.pre-market-text { font-size: 12px; color: #ff9800; font-weight: bold; margin: 0; margin-top: 2px;}
+.change-text { font-size: 12px; margin: 0; margin-bottom: 8px;}
+.rec-item { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px;}
 .rec-label { color: #888; }
-.news-item { font-size: 12px; margin-bottom: 8px; color: #d1d4dc; line-height: 1.4;}
-.score-badge { font-size: 24px; font-weight: bold; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 10px;}
-.breakdown-text { font-size: 10px; color: #6c757d; text-align: center; margin-top: 5px; line-height: 1.5; border-top: 1px dashed #2a2e39; padding-top: 5px;}
+.news-item { font-size: 11px; margin-bottom: 6px; color: #d1d4dc; line-height: 1.4;}
+.score-badge { font-size: 22px; font-weight: bold; padding: 8px; border-radius: 8px; text-align: center; margin-bottom: 8px;}
+.breakdown-text { font-size: 9px; color: #6c757d; text-align: center; margin-top: 5px; line-height: 1.5; border-top: 1px dashed #2a2e39; padding-top: 5px;}
+
+/* تصميم للموبايل */
+@media (max-width: 768px) {
+    .block-container { padding: 0rem !important; }
+    .side-card { border-radius: 0; margin-bottom: 5px; border-left: none; border-bottom: 2px solid #2a2e39; }
+    .top-bar { padding: 2px; }
+    .ticker-name { font-size: 16px; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -56,14 +66,12 @@ COMPANY_NAMES = {
     "COST": "Costco", "NKE": "Nike", "SBUX": "Starbucks", "MCD": "McDonald's",
     "JNJ": "Johnson & Johnson", "UNH": "UnitedHealth", "PFE": "Pfizer", "LLY": "Eli Lilly",
     "XOM": "Exxon Mobil", "CVX": "Chevron", "BA": "Boeing", "PLTR": "Palantir",
-    
     "2222.SR": "أرامكو", "2010.SR": "سابك", "1120.SR": "الراجحي", "1180.SR": "الأهلي", 
     "2350.SR": "كيان", "1211.SR": "معادن", "4013.SR": "دله الصحية", "7010.SR": "الاتصالات",
     "4300.SR": "دار الأركان", "2280.SR": "المراعي", "7020.SR": "موبايلي", "7030.SR": "زين",
     "4014.SR": "علم", "1111.SR": "تداول", "4015.SR": "الدوائية", "4002.SR": "المواساة",
     "4004.SR": "الحبيب", "4161.SR": "بن داود", "4192.SR": "لجام", "7203.SR": "طيران ناس",
     "2082.SR": "أكوا باور", "6018.SR": "نادك", "4191.SR": "أم القرى", "8230.SR": "الراجحي للتأمين",
-    
     "COMI.CA": "البنك التجاري", "EFIH.CA": "إي فاينانس", "HRHO.CA": "هيرميس", "ETEL.CA": "المصرية للاتصالات", 
     "SWDY.CA": "السويدي", "EAST.CA": "الشرقية إيسترن", "TMGH.CA": "طلعت مصطفى", "ABUK.CA": "أبو قير", "SKPC.CA": "سيدي كرير", "ORAS.CA": "أوراسكوم",
 }
@@ -243,13 +251,12 @@ def get_options_recommendation(ticker, current_price, general_rec):
     except: return None
 
 # ==========================================
-# 3. تقسيم الشاشة
+# 3. تقسيم الشاشة (يتحول لشكل طولي على الموبايل)
 # ==========================================
-col_chart, col_sidebar = st.columns([3.5, 1.2], gap="medium")
+col_chart, col_sidebar = st.columns([2.5, 1], gap="medium")
 
-with col_sidebar:
-    st.markdown("### 📋 Watchlist")
-    
+# --- الشارت الرئيسي ---
+with col_chart:
     market_options = list(MARKETS.keys()) + ["📊 المؤشرات (Indices)"]
     selected_market = st.selectbox("السوق", market_options, index=0, label_visibility="collapsed")
     
@@ -259,15 +266,13 @@ with col_sidebar:
         selected_ticker = INDICES[selected_ticker_display]
     else:
         ticker_symbols = MARKETS[selected_market]
-        
         stock_scores_dict = {}
-        with st.spinner("جاري تقييم وترتيب الأسهم..."):
+        with st.spinner("جاري تقييم الأسهم..."):
             for t in ticker_symbols:
                 time.sleep(0.05) 
                 s, _, _, _, _, _, _ = get_multi_factor_score(t)
                 stock_scores_dict[t] = s
         
-        # 🌟 الترتيب من الأكبر للأصغر
         sorted_tickers = sorted(ticker_symbols, key=lambda x: stock_scores_dict.get(x, 0), reverse=True)
         
         def format_ticker(t):
@@ -278,9 +283,8 @@ with col_sidebar:
             else: emoji = "🟡"
             return f"{emoji} {name} ({t}) - {s}"
         
-        # 🌟 عرض القائمة المرتبة
         selected_ticker = st.selectbox(
-            "اختر السهم للتحليل التفصيلي:", 
+            "اختر السهم:", 
             sorted_tickers, 
             format_func=format_ticker, 
             label_visibility="collapsed"
@@ -297,91 +301,13 @@ with col_sidebar:
         change = current_price - prev_close
         change_pct = (change / prev_close) * 100
         
-        ext_price = fetch_extended_hours(selected_ticker)
-        ext_html = f'<p class="pre-market-text">PRE: ${ext_price:.2f}</p>' if ext_price and ext_price > 0 else ""
-
         color = "#00c853" if change >= 0 else "#ff3d00"
         sign = "+" if change >= 0 else ""
-
-        total_score, recommendation, reasons, intraday_t, swing_t, stock_sl, breakdown = get_multi_factor_score(selected_ticker)
-        score_color = "#00c853" if total_score >= 60 else ("#ff3d00" if total_score <= 40 else "#ff9800")
         
-        st.markdown(f"""
-        <div class="side-card live-card">
-        <div class="card-title">🧠 محرك التقييم المتعدد</div>
-        <div class="score-badge" style="background-color: {score_color}20; color: {score_color}; border: 1px solid {score_color};">{total_score} / 100</div>
-        <div style="text-align: center; font-weight: bold; font-size: 16px; color: {score_color}; margin-bottom: 5px;">{recommendation}</div>
-        <div style="font-size: 11px; color: #888; text-align: center; margin-bottom: 5px;">{reasons}</div>
-        <div class="breakdown-text">{breakdown}</div>
-        <div style="border-top: 1px solid #2a2e39; margin: 10px 0;"></div>
-        
-        <p class="price-text" style="color: {color};">${current_price:.2f}</p>
-        {ext_html}
-        <p class="change-text" style="color: {color}; margin-top: 5px;">{sign}{change:.2f} ({sign}{change_pct:.2f}%)</p>
-        
-        <div style="background: {score_color}15; padding: 10px; border-radius: 5px; margin-top: 10px;">
-            <div class="rec-item" style="margin-bottom: 5px;">
-                <span class="rec-label" style="color: #ddd;">هدف الجلسة:</span> 
-                <span style="color:{score_color}; font-weight:bold;">${intraday_t:.2f}</span>
-            </div>
-            <div class="rec-item" style="margin-bottom: 5px;">
-                <span class="rec-label" style="color: #ddd;">هدف الانتهاء:</span> 
-                <span style="color:{score_color}; font-weight:bold;">${swing_t:.2f}</span>
-            </div>
-            <div class="rec-item" style="margin-bottom: 0px;">
-                <span class="rec-label" style="color: #ddd;">وقف الخسارة:</span> 
-                <span style="color:#ff3d00; font-weight:bold;">${stock_sl:.2f}</span>
-            </div>
-        </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        liq_status, spread, liq_color = get_liquidity_info(selected_ticker)
-        st.markdown(f"""
-        <div class="side-card liquidity-card">
-        <div class="card-title">💧 تحليل السيولة (Liquidity)</div>
-        <div class="rec-item"><span class="rec-label">حالة السيولة:</span> <span style="color:{liq_color}; font-weight:bold;">{liq_status}</span></div>
-        <div class="rec-item"><span class="rec-label">فرق السعر (Spread):</span> <span>{spread:.2f}%</span></div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        options_rec = get_options_recommendation(selected_ticker, current_price, recommendation)
-        if options_rec:
-            opt_color = "#00c853" if options_rec['change'] >= 0 else "#ff3d00"
-            opt_sign = "+" if options_rec['change'] >= 0 else ""
-            
-            st.markdown(f"""
-            <div class="side-card options-card">
-            <div class="card-title">📄 توصية عقود الخيارات</div>
-            <div class="rec-item"><span class="rec-label">النوع:</span> <span style="color:#00bcd4; font-weight:bold;">{options_rec['type']}</span></div>
-            <div class="rec-item"><span class="rec-label">الانتهاء:</span> <span>{options_rec['expiration']}</span></div>
-            <div class="rec-item"><span class="rec-label">Strike:</span> <span>${options_rec['strike']:.2f}</span></div>
-            <div class="rec-item"><span class="rec-label">سعر العقد:</span> <span style="color:{opt_color}; font-weight:bold;">${options_rec['last_price']:.2f} ({opt_sign}{options_rec['change']:.2f})</span></div>
-            <div style="border-top: 1px dashed #2a2e39; margin: 8px 0;"></div>
-            <div class="rec-item"><span class="rec-label">هدف الجلسة (+30%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['session_target']:.2f}</span></div>
-            <div class="rec-item"><span class="rec-label">هدف الانتهاء (+100%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['expiry_target']:.2f}</span></div>
-            <div class="rec-item"><span class="rec-label">وقف الخسارة:</span> <span style="color:#ff3d00; font-weight:bold;">${options_rec['stop_loss']:.2f}</span></div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        news = fetch_news(selected_ticker)
-        news_html = "".join([f"<div class='news-item'>• {n}</div>" for n in news]) if news else "<div class='news-item'>لا توجد أخبار حديثة.</div>"
-        st.markdown(f"""
-        <div class="side-card general-card">
-        <div class="card-title">📰 أخبار السهم</div>
-        {news_html}
-        </div>
-        """, unsafe_allow_html=True)
-
-with col_chart:
-    if not df.empty:
         company_name = COMPANY_NAMES.get(selected_ticker, selected_ticker)
         st.markdown(f"""
         <div class="top-bar">
             <span class="ticker-name">{company_name} · {selected_ticker} · {selected_timeframe}</span>
-            <span class="ohlc-data">O {df['Open'].iloc[-1]:.2f}</span>
-            <span class="ohlc-data">H {df['High'].iloc[-1]:.2f}</span>
-            <span class="ohlc-data">L {df['Low'].iloc[-1]:.2f}</span>
             <span class="ohlc-data">C {current_price:.2f}</span>
             <span class="{'green-text' if change >= 0 else 'red-text'}" style="font-weight:bold;">{sign}{change:.2f} ({sign}{change_pct:.2f}%)</span>
         </div>
@@ -404,13 +330,89 @@ with col_chart:
         colors = ['#089981' if close >= open else '#f23645' for open, close in zip(df_plot['Open'], df_plot['Close'])]
         fig.add_trace(go.Bar(x=df_plot.index, y=df_plot['Volume'], name="Volume", marker_color=colors), row=2, col=1)
 
+        # إزالة العرض الثابت (1200) عشان يتكيف مع الموبايل
         fig.update_layout(
             template="plotly_dark", paper_bgcolor='#131722', plot_bgcolor='#131722', 
-            height=700, width=1200, margin=dict(l=10, r=10, t=10, b=10), 
+            height=400, # تقليل الطول شوية ليناسب الموبايل
+            autosize=True,
+            margin=dict(l=5, r=5, t=5, b=5), 
             showlegend=False, dragmode="pan", hovermode="x unified", uirevision='constant',
             xaxis=dict(showgrid=True, gridcolor='#2a2e39', fixedrange=False),
             yaxis=dict(showgrid=True, gridcolor='#2a2e39', side='right', fixedrange=False)
         )
         fig.update_yaxes(showgrid=False, side='right', row=2, col=1, fixedrange=False)
 
-        st.plotly_chart(fig, use_container_width=False, config={'displayModeBar': False, 'scrollZoom': True})
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
+
+# --- القائمة اليمين (التوصيات) ---
+with col_sidebar:
+    if not df.empty:
+        ext_price = fetch_extended_hours(selected_ticker)
+        ext_html = f'<p class="pre-market-text">PRE: ${ext_price:.2f}</p>' if ext_price and ext_price > 0 else ""
+
+        total_score, recommendation, reasons, intraday_t, swing_t, stock_sl, breakdown = get_multi_factor_score(selected_ticker)
+        score_color = "#00c853" if total_score >= 60 else ("#ff3d00" if total_score <= 40 else "#ff9800")
+        
+        st.markdown(f"""
+        <div class="side-card live-card">
+        <div class="card-title">🧠 محرك التقييم المتعدد</div>
+        <div class="score-badge" style="background-color: {score_color}20; color: {score_color}; border: 1px solid {score_color};">{total_score} / 100</div>
+        <div style="text-align: center; font-weight: bold; font-size: 14px; color: {score_color}; margin-bottom: 5px;">{recommendation}</div>
+        <div style="font-size: 10px; color: #888; text-align: center; margin-bottom: 5px;">{reasons}</div>
+        <div class="breakdown-text">{breakdown}</div>
+        <div style="border-top: 1px solid #2a2e39; margin: 8px 0;"></div>
+        
+        <p class="price-text" style="color: {color};">${current_price:.2f}</p>
+        {ext_html}
+        <p class="change-text" style="color: {color}; margin-top: 5px;">{sign}{change:.2f} ({sign}{change_pct:.2f}%)</p>
+        
+        <div style="background: {score_color}15; padding: 8px; border-radius: 5px; margin-top: 10px;">
+            <div class="rec-item"><span class="rec-label">هدف الجلسة:</span> <span style="color:{score_color}; font-weight:bold;">${intraday_t:.2f}</span></div>
+            <div class="rec-item"><span class="rec-label">هدف الانتهاء:</span> <span style="color:{score_color}; font-weight:bold;">${swing_t:.2f}</span></div>
+            <div class="rec-item"><span class="rec-label">وقف الخسارة:</span> <span style="color:#ff3d00; font-weight:bold;">${stock_sl:.2f}</span></div>
+        </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        liq_status, spread, liq_color = get_liquidity_info(selected_ticker)
+        st.markdown(f"""
+        <div class="side-card liquidity-card">
+        <div class="card-title">💧 تحليل السيولة</div>
+        <div class="rec-item"><span class="rec-label">السيولة:</span> <span style="color:{liq_color}; font-weight:bold;">{liq_status}</span></div>
+        <div class="rec-item"><span class="rec-label">Spread:</span> <span>{spread:.2f}%</span></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        options_rec = get_options_recommendation(selected_ticker, current_price, recommendation)
+        if options_rec:
+            opt_color = "#00c853" if options_rec['change'] >= 0 else "#ff3d00"
+            opt_sign = "+" if options_rec['change'] >= 0 else ""
+            st.markdown(f"""
+            <div class="side-card options-card">
+            <div class="card-title">📄 عقود الخيارات</div>
+            <div class="rec-item"><span class="rec-label">النوع:</span> <span style="color:#00bcd4; font-weight:bold;">{options_rec['type']}</span></div>
+            <div class="rec-item"><span class="rec-label">الانتهاء:</span> <span>{options_rec['expiration']}</span></div>
+            <div class="rec-item"><span class="rec-label">Strike:</span> <span>${options_rec['strike']:.2f}</span></div>
+            <div class="rec-item"><span class="rec-label">سعر العقد:</span> <span style="color:{opt_color}; font-weight:bold;">${options_rec['last_price']:.2f} ({opt_sign}{options_rec['change']:.2f})</span></div>
+            <div style="border-top: 1px dashed #2a2e39; margin: 6px 0;"></div>
+            <div class="rec-item"><span class="rec-label">هدف الجلسة (+30%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['session_target']:.2f}</span></div>
+            <div class="rec-item"><span class="rec-label">هدف الانتهاء (+100%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['expiry_target']:.2f}</span></div>
+            <div class="rec-item"><span class="rec-label">وقف الخسارة:</span> <span style="color:#ff3d00; font-weight:bold;">${options_rec['stop_loss']:.2f}</span></div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div class="side-card options-card">
+            <div class="card-title">📄 عقود الخيارات</div>
+            <div class="news-item">لا توجد بيانات عقود متاحة لهذا السهم حالياً.</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        news = fetch_news(selected_ticker)
+        news_html = "".join([f"<div class='news-item'>• {n}</div>" for n in news]) if news else "<div class='news-item'>لا توجد أخبار حديثة.</div>"
+        st.markdown(f"""
+        <div class="side-card general-card">
+        <div class="card-title">📰 أخبار السهم</div>
+        {news_html}
+        </div>
+        """, unsafe_allow_html=True)
