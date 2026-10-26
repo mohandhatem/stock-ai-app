@@ -53,7 +53,7 @@ footer {visibility: hidden;}
 st_autorefresh(interval=60000, limit=None, key="live_refresh")
 
 # ==========================================
-# 2. البيانات والقوائم
+# 2. البيانات (القوائم + جلب أعلى الطالعين)
 # ==========================================
 SAUDI_TICKERS = [
     "2222.SR", "2010.SR", "1120.SR", "1180.SR", "2350.SR", "1211.SR", "4013.SR", "7010.SR", "4300.SR",
@@ -65,7 +65,7 @@ SAUDI_TICKERS = [
 ]
 
 US_TICKERS = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX", "AMD", "INTC", "JPM", "V", "WMT", "DIS",
+    "SBRC", "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX", "AMD", "INTC", "JPM", "V", "WMT", "DIS",
     "ORCL", "CRM", "ADBE", "AVGO", "QCOM", "BAC", "GS", "MA", "PYPL", "COST", "NKE", "SBUX", "MCD", 
     "JNJ", "UNH", "PFE", "LLY", "XOM", "CVX", "BA", "PLTR", "IBM", "GE", "CAT", "MMM", "HON", "UPS",
     "FDX", "T", "VZ", "TMUS", "CMCSA", "CSCO", "TXN", "AMAT", "MU", "LRCX"
@@ -76,7 +76,23 @@ EGYPT_TICKERS = [
     "SKPC.CA", "ORAS.CA", "AMOC.CA", "ESRS.CA", "HELI.CA", "ORTE.CA", "PHDC.CA", "MNHD.CA"
 ]
 
+# 🌟 دالة لجلب الأسهم الأكثر ربحاً ونشاطاً في السوق الأمريكي
+@st.cache_data(ttl=3600)
+def get_us_top_movers():
+    try:
+        gainers = yf.screen("day_gainers", count=30)
+        actives = yf.screen("most_actives", count=30)
+        
+        g_symbols = [q['symbol'] for q in gainers.get('quotes', [])]
+        a_symbols = [q['symbol'] for q in actives.get('quotes', [])]
+        
+        return list(set(g_symbols + a_symbols))
+    except:
+        return []
+
 COMPANY_NAMES = {
+    "SBRC": "Sound Equity (SBRC)",
+    # ... (باقي الأسماء كما هي)
     "2222.SR": "أرامكو", "2010.SR": "سابك", "1120.SR": "الراجحي", "1180.SR": "الأهلي", "2350.SR": "كيان", 
     "1211.SR": "معادن", "4013.SR": "دله الصحية", "7010.SR": "الاتصالات", "4300.SR": "دار الأركان", 
     "2280.SR": "المراعي", "7020.SR": "موبايلي", "7030.SR": "زين", "4014.SR": "علم", "1111.SR": "تداول", 
@@ -88,7 +104,6 @@ COMPANY_NAMES = {
     "4344.SR": "الرياض ريت", "8010.SR": "التعاونية", "8210.SR": "بوبا العربية", "8300.SR": "الوطنية", "4003.SR": "الإنماء",
     "2320.SR": "البابطين", "6050.SR": "الأسماك", "2083.SR": "مرافق", "4334.SR": "المعذر ريت", 
     "2230.SR": "الكيميائية", "4328.SR": "لدن", "6016.SR": "برغراينز", "4290.SR": "الخليج للتدريب",
-    
     "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet", "AMZN": "Amazon", "TSLA": "Tesla", 
     "NVDA": "NVIDIA", "META": "Meta", "NFLX": "Netflix", "AMD": "AMD", "INTC": "Intel", "JPM": "JPMorgan", 
     "V": "Visa", "WMT": "Walmart", "DIS": "Disney", "ORCL": "Oracle", "CRM": "Salesforce", "ADBE": "Adobe", 
@@ -96,15 +111,14 @@ COMPANY_NAMES = {
     "PYPL": "PayPal", "COST": "Costco", "NKE": "Nike", "SBUX": "Starbucks", "MCD": "McDonald's",
     "JNJ": "Johnson & Johnson", "UNH": "UnitedHealth", "PFE": "Pfizer", "LLY": "Eli Lilly", "XOM": "Exxon Mobil", 
     "CVX": "Chevron", "BA": "Boeing", "PLTR": "Palantir", "IBM": "IBM", "GE": "General Electric", "CAT": "Caterpillar",
-
     "COMI.CA": "البنك التجاري", "EFIH.CA": "إي فاينانس", "HRHO.CA": "هيرميس", "ETEL.CA": "المصرية للاتصالات", 
     "SWDY.CA": "السويدي", "EAST.CA": "الشرقية إيسترن", "TMGH.CA": "طلعت مصطفى", "ABUK.CA": "أبو قير", "SKPC.CA": "سيدي كرير", 
 }
 
 MARKETS = {
-    "🇸🇦 سعودي (Tadawul)": SAUDI_TICKERS,
-    "🇺🇸 أمريكي (US)": US_TICKERS,
-    "🇪🇬 مصري (EGX)": EGYPT_TICKERS,
+    "🇸🇦 سعودي (Tadawul)": "sa",
+    "🇺🇸 أمريكي (US)": "us",
+    "🇪🇬 مصري (EGX)": "eg",
 }
 
 INDICES = {
@@ -132,30 +146,6 @@ def fetch_data(ticker, interval, period):
         return df
     except: return pd.DataFrame()
 
-@st.cache_data(ttl=60)
-def fetch_extended_hours(ticker):
-    try:
-        info = yf.Ticker(ticker).info
-        price = info.get('preMarketPrice') or info.get('postMarketPrice') or info.get('regularMarketPreviousClose')
-        return price
-    except: return None
-
-@st.cache_data(ttl=300)
-def get_liquidity_info(ticker):
-    try:
-        info = yf.Ticker(ticker).info
-        vol = info.get('averageVolume', 0)
-        bid = info.get('bid', 0)
-        ask = info.get('ask', 0)
-        price = info.get('currentPrice', info.get('regularMarketPrice', 1))
-        if bid == 0 or ask == 0: return "غير متاح حالياً", 0.0, "#888"
-        spread_pct = ((ask - bid) / price) * 100
-        if vol > 5_000_000 and spread_pct < 0.1: status, color = "عالية جداً", "#00c853"
-        elif vol > 1_000_000: status, color = "متوسطة", "#ff9800"
-        else: status, color = "ضعيفة", "#ff3d00"
-        return status, spread_pct, color
-    except: return "غير متاح", 0.0, "#888"
-
 @st.cache_data(ttl=300)
 def fetch_news(ticker):
     try:
@@ -164,7 +154,7 @@ def fetch_news(ticker):
     except: return []
 
 # ==========================================
-# 4. محرك التحليل الخارق (Confluence Engine)
+# 4. محرك التحليل الخارق
 # ==========================================
 def calculate_advanced_confluence(df):
     if df.empty or len(df) < 50: 
@@ -178,12 +168,9 @@ def calculate_advanced_confluence(df):
     prev_close = close.iloc[-2]
     atr = (high - low).rolling(14).mean().iloc[-1]
 
-    # 1. محور الاتجاه (Trend)
     sma20 = close.rolling(20).mean().iloc[-1]
     sma50 = close.rolling(50).mean().iloc[-1]
     sma200 = close.rolling(200).mean().iloc[-1] if len(close) >= 200 else sma50
-    ema9 = close.ewm(span=9, adjust=False).mean().iloc[-1]
-    ema21 = close.ewm(span=21, adjust=False).mean().iloc[-1]
     
     is_above_smas = (current_price > sma20 > sma50 > sma200)
     if is_above_smas:
@@ -191,15 +178,8 @@ def calculate_advanced_confluence(df):
         breakdown.append("اتجاه صاعد (فوق المتوسطات)")
     elif current_price < sma20 < sma50:
         score -= 15
-        breakdown.append("اتجاه هابط (تحت المتوسطات)")
-        
-    if ema9 > ema21:
-        score += 5
-        breakdown.append("تقاطع EMA إيجابي")
-    else:
-        score -= 5
+        breakdown.append("اتجاه هابط")
 
-    # 2. محور الزخم (Momentum)
     delta = close.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -207,13 +187,12 @@ def calculate_advanced_confluence(df):
     
     if 50 <= rsi < 70: 
         score += 10
-        breakdown.append(f"زخم إيجابي (RSI: {rsi:.1f})")
+        breakdown.append(f"زخم إيجابي")
     elif rsi <= 30: 
         score += 5
-        breakdown.append(f"تشبع بيعي (RSI: {rsi:.1f})")
+        breakdown.append(f"تشبع بيعي")
     elif rsi >= 70:
         score -= 10
-        breakdown.append("تشبع شرائي خطير")
 
     macd = close.ewm(span=12, adjust=False).mean() - close.ewm(span=26, adjust=False).mean()
     signal = macd.ewm(span=9, adjust=False).mean()
@@ -222,9 +201,7 @@ def calculate_advanced_confluence(df):
         breakdown.append("MACD إيجابي")
     else: 
         score -= 10
-        breakdown.append("MACD سلبي")
 
-    # 3. محور السيولة والاختراق (Volume & Breakout)
     recent_high = high.tail(20).max()
     if current_price >= recent_high * 0.99: 
         score += 15
@@ -233,43 +210,27 @@ def calculate_advanced_confluence(df):
     avg_vol = volume.rolling(20).mean().iloc[-1]
     if volume.iloc[-1] > avg_vol * 1.5:
         score += 15
-        breakdown.append("انفجار في السيولة")
+        breakdown.append("انفجار سيولة")
         
     daily_change = ((current_price - prev_close) / prev_close) * 100
     if daily_change >= 5.0:
         score += 20
         breakdown.append(f"انفجار سعري (+{daily_change:.1f}%)")
 
-    # 4. محور التقلب والشموع (Volatility & Patterns)
-    upper_band = close.rolling(20).mean() + (close.rolling(20).std() * 2)
-    lower_band = close.rolling(20).mean() - (close.rolling(20).std() * 2)
-    if current_price <= lower_band.iloc[-1]: 
-        score += 10
-        breakdown.append("دعم بولينجر (فرصة شراء)")
-    elif current_price >= upper_band.iloc[-1]: 
-        score -= 5
-        
-    last_open, last_close = open_p.iloc[-1], close.iloc[-1]
-    prev_open, prev_close_val = open_p.iloc[-2], close.iloc[-2]
-    
-    if prev_close_val < prev_open and last_close > last_open and last_close > prev_open and last_open < prev_close_val:
-        score += 10
-        breakdown.append("شمعة ابتلاع صاعد")
-    
     score = max(0, min(100, score))
     
-    if score >= 75:
-        rec = "شراء قوي جداً (STRONG BUY)"
+    if score >= 70:
+        rec = "شراء قوي (BUY)"
         intraday_target = current_price + (atr * 1.0)
         swing_target = current_price + (atr * 3.0)
         stop_loss = current_price - (atr * 1.5)
-    elif score >= 60:
+    elif score >= 55:
         rec = "شراء (BUY)"
         intraday_target = current_price + (atr * 0.5)
         swing_target = current_price + (atr * 2.0)
         stop_loss = current_price - (atr * 1.5)
     elif score <= 30:
-        rec = "بيع قوي (STRONG SELL)"
+        rec = "بيع قوي (SELL)"
         intraday_target = current_price - (atr * 1.0)
         swing_target = current_price - (atr * 3.0)
         stop_loss = current_price + (atr * 1.5)
@@ -288,11 +249,6 @@ def calculate_advanced_confluence(df):
     return score, rec, breakdown_str, intraday_target, swing_target, stop_loss, is_above_smas, breakdown_str
 
 @st.cache_data(ttl=600)
-def get_multi_factor_score(ticker):
-    df = fetch_data(ticker, "1d", "1y")
-    return calculate_advanced_confluence(df)
-
-@st.cache_data(ttl=600)
 def evaluate_and_sort_tickers(tickers):
     results = {}
     chunk_size = 10
@@ -309,59 +265,21 @@ def evaluate_and_sort_tickers(tickers):
                         df = data.dropna()
                     if len(df) < 50: continue
                     
-                    score, _, _, _, _, _, is_above_smas, _ = calculate_advanced_confluence(df)
+                    score, rec, _, _, _, _, is_above_smas, _ = calculate_advanced_confluence(df)
                     
                     current = df['Close'].iloc[-1]
                     prev = df['Close'].iloc[-2]
                     daily_change = ((current - prev) / prev) * 100
                     
-                    has_news = False
-                    if score >= 60 or daily_change >= 5:
-                        news = fetch_news(t)
-                        if len(news) > 0: has_news = True
-                            
                     results[t] = {
                         'score': score,
+                        'rec': rec,
                         'above_smas': is_above_smas,
-                        'has_news': has_news,
                         'daily_change': daily_change
                     }
                 except: pass
         except: pass
     return results
-
-@st.cache_data(ttl=600)
-def get_options_recommendation(ticker, current_price, general_rec, atr):
-    try:
-        stock = yf.Ticker(ticker)
-        expirations = stock.options
-        if expirations:
-            chain = stock.option_chain(expirations[0])
-            calls, puts = chain.calls, chain.puts
-            if not calls.empty and not puts.empty:
-                chosen = calls.loc[abs(calls['strike'] - current_price).idxmin()] if "شراء" in general_rec else puts.loc[abs(puts['strike'] - current_price).idxmin()]
-                last_price = chosen['lastPrice']
-                if last_price > 0:
-                    return {
-                        "type": "Call (ATM)" if "شراء" in general_rec else "Put (ATM)", 
-                        "expiration": expirations[0], "strike": chosen['strike'],
-                        "last_price": last_price, "stop_loss": last_price * 0.80, 
-                        "session_target": last_price * 1.30, "expiry_target": last_price * 2.00,  
-                        "change": chosen.get('change', 0), "is_estimated": False
-                    }
-    except: pass
-    
-    est_exp = (datetime.date.today() + datetime.timedelta(days=30)).strftime("%Y-%m-%d")
-    est_price = round(current_price * 0.02, 2)
-    est_strike = round(current_price * 1.02, 2) if "شراء" in general_rec else round(current_price * 0.98, 2)
-    
-    return {
-        "type": "Call (تقديري)" if "شراء" in general_rec else "Put (تقديري)", 
-        "expiration": est_exp, "strike": est_strike,
-        "last_price": est_price, "stop_loss": est_price * 0.80, 
-        "session_target": est_price * 1.30, "expiry_target": est_price * 2.00,  
-        "change": 0, "is_estimated": True
-    }
 
 # ==========================================
 # 5. تقسيم الشاشة والعرض
@@ -369,50 +287,60 @@ def get_options_recommendation(ticker, current_price, general_rec, atr):
 col_chart, col_sidebar = st.columns([2.5, 1], gap="medium")
 
 with col_chart:
-    c1, c2 = st.columns([2, 1])
+    c1, c2, c3 = st.columns([1.5, 1, 1.5])
     with c1:
-        market_options = list(MARKETS.keys()) + ["📊 المؤشرات (Indices)"]
-        selected_market = st.selectbox("السوق", market_options, index=0, label_visibility="collapsed")
+        market_options = list(MARKETS.keys()) + ["📊 المؤشرات"]
+        selected_market = st.selectbox("السوق", market_options, index=1, label_visibility="collapsed")
     with c2:
         selected_timeframe = st.selectbox("الإطار", list(TIMEFRAMES.keys()), index=1, label_visibility="collapsed")
+    with c3:
+        # 🌟 فلتر الإيجابي والسلبي
+        filter_mode = st.selectbox("الفلتر", ["الكل", "إيجابي (شراء) 🟢", "سلبي (بيع) 🔴"], label_visibility="collapsed")
     
-    if selected_market == "📊 المؤشرات (Indices)":
+    if selected_market == "📊 المؤشرات":
         ticker_options = list(INDICES.keys())
         selected_ticker_display = st.selectbox("المؤشر", ticker_options, index=0, label_visibility="collapsed")
         selected_ticker = INDICES[selected_ticker_display]
     else:
-        tickers_list = MARKETS[selected_market]
-        with st.spinner("جاري التحليل الشامل وترتيب الأسهم..."):
+        market_code = MARKETS[selected_market]
+        
+        # تجميع الأسهم (القوائم الأساسية + أعلى الطالعين)
+        if market_code == "us":
+            top_movers = get_us_top_movers()
+            tickers_list = list(set(US_TICKERS + top_movers))
+        elif market_code == "sa":
+            tickers_list = SAUDI_TICKERS
+        else:
+            tickers_list = EGYPT_TICKERS
+
+        with st.spinner("جاري تحليل جميع الأسهم (بما فيها أعلى الطالعين)..."):
             eval_data = evaluate_and_sort_tickers(tickers_list)
                 
+        # الترتيب
         def sort_priority(ticker):
-            data = eval_data.get(ticker, {'score': 0, 'above_smas': False, 'has_news': False, 'daily_change': 0})
-            daily = data['daily_change']
-            is_above = data['above_smas']
-            has_news = data['has_news']
-            score = data['score']
-            
-            if daily >= 5.0: return (5, daily, score)
-            elif is_above and score >= 60: return (4, score, daily)
-            elif is_above: return (3, score, daily)
-            elif has_news and score >= 60: return (2, score, daily)
-            elif score >= 60: return (1, score, daily)
-            else: return (0, score, daily)
+            data = eval_data.get(ticker, {'score': 0, 'daily_change': 0})
+            return (data['score'], data['daily_change'])
             
         sorted_tickers = sorted(eval_data.keys(), key=sort_priority, reverse=True)
         
+        # 🌟 تطبيق الفلتر
+        if filter_mode == "إيجابي (شراء) 🟢":
+            sorted_tickers = [t for t in sorted_tickers if eval_data[t]['score'] >= 55]
+        elif filter_mode == "سلبي (بيع) 🔴":
+            sorted_tickers = [t for t in sorted_tickers if eval_data[t]['score'] <= 45]
+        
+        if not sorted_tickers:
+            st.warning("لا توجد أسهم تطابق الفلتر المختار حالياً.")
+            st.stop()
+        
         def format_ticker(t):
-            data = eval_data.get(t, {'score': 50, 'above_smas': False, 'has_news': False, 'daily_change': 0})
+            data = eval_data.get(t, {'score': 50, 'rec': 'احتفاظ', 'daily_change': 0})
             s = data['score']
-            is_above = data['above_smas']
-            has_news = data['has_news']
             daily = data['daily_change']
             name = COMPANY_NAMES.get(t, t)
             
-            if daily >= 5.0: prefix = "🚀🔥"
-            elif is_above and s >= 60: prefix = "🏆"
-            elif is_above: prefix = "🚀"
-            elif has_news and s >= 60: prefix = "📰🟢"
+            if daily >= 10.0: prefix = "🚀🔥"
+            elif daily >= 5.0: prefix = "🚀"
             elif s >= 60: prefix = "🟢"
             elif s <= 40: prefix = "🔴"
             else: prefix = "🟡"
@@ -421,6 +349,7 @@ with col_chart:
         
         selected_ticker = st.selectbox("اختر السهم:", sorted_tickers, format_func=format_ticker, label_visibility="collapsed")
 
+    # ... (كود الرسم البياني يبقى كما هو تماماً) ...
     tf_config = TIMEFRAMES[selected_timeframe]
     df = fetch_data(selected_ticker, tf_config["interval"], tf_config["period"])
     
@@ -467,10 +396,7 @@ with col_chart:
 
 with col_sidebar:
     if not df.empty:
-        ext_price = fetch_extended_hours(selected_ticker)
-        ext_html = f'<p class="pre-market-text">PRE: ${ext_price:.2f}</p>' if ext_price and ext_price > 0 else ""
-
-        total_score, recommendation, reasons, intraday_t, swing_t, stock_sl, is_above, breakdown = get_multi_factor_score(selected_ticker)
+        total_score, recommendation, reasons, intraday_t, swing_t, stock_sl, is_above, breakdown = calculate_advanced_confluence(df)
         score_color = "#00c853" if total_score >= 60 else ("#ff3d00" if total_score <= 40 else "#ff9800")
         
         st.markdown(f"""
@@ -478,14 +404,10 @@ with col_sidebar:
         <div class="card-title">🧠 محرك التحليل الخارق</div>
         <div class="score-badge" style="background-color: {score_color}20; color: {score_color}; border: 1px solid {score_color};">{total_score} / 100</div>
         <div style="text-align: center; font-weight: bold; font-size: 14px; color: {score_color}; margin-bottom: 5px;">{recommendation}</div>
-        
         <div class="breakdown-text"><b>أسباب التوصية:</b><br>{breakdown}</div>
         <div style="border-top: 1px solid #2a2e39; margin: 8px 0;"></div>
-        
         <p class="price-text" style="color: {color};">${current_price:.2f}</p>
-        {ext_html}
         <p class="change-text" style="color: {color}; margin-top: 5px;">{sign}{change:.2f} ({sign}{change_pct:.2f}%)</p>
-        
         <div style="background: {score_color}15; padding: 8px; border-radius: 5px; margin-top: 10px;">
             <div class="rec-item"><span class="rec-label">هدف الجلسة:</span> <span style="color:{score_color}; font-weight:bold;">${intraday_t:.2f}</span></div>
             <div class="rec-item"><span class="rec-label">هدف الانتهاء:</span> <span style="color:{score_color}; font-weight:bold;">${swing_t:.2f}</span></div>
@@ -493,47 +415,6 @@ with col_sidebar:
         </div>
         </div>
         """, unsafe_allow_html=True)
-
-        liq_status, spread, liq_color = get_liquidity_info(selected_ticker)
-        st.markdown(f"""
-        <div class="side-card liquidity-card">
-        <div class="card-title">💧 تحليل السيولة</div>
-        <div class="rec-item"><span class="rec-label">السيولة:</span> <span style="color:{liq_color}; font-weight:bold;">{liq_status}</span></div>
-        <div class="rec-item"><span class="rec-label">Spread:</span> <span>{spread:.2f}%</span></div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # 🌟 التحقق من السوق: هل هو سعودي أو مصري؟
-        is_non_us_market = (".SR" in selected_ticker or ".CA" in selected_ticker)
-
-        if is_non_us_market:
-            st.markdown("""
-            <div class="side-card options-card" style="border-left-color: #555;">
-            <div class="card-title">📄 عقود الخيارات</div>
-            <div class="news-item" style="text-align: center; color: #888;">عقود الخيارات غير متاحة في هذا السوق حالياً (متاحة للسوق الأمريكي فقط).</div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            options_rec = get_options_recommendation(selected_ticker, current_price, recommendation, atr)
-            if options_rec:
-                opt_color = "#00c853" if options_rec['change'] >= 0 else "#ff3d00"
-                opt_sign = "+" if options_rec['change'] >= 0 else ""
-                warning_html = '<div class="estimate-warning">⚠️ سعر تقديري (السيرفر مش راجع بيانات حقيقية)</div>' if options_rec.get('is_estimated') else ""
-                
-                st.markdown(f"""
-                <div class="side-card options-card">
-                <div class="card-title">📄 عقود الخيارات</div>
-                {warning_html}
-                <div class="rec-item"><span class="rec-label">النوع:</span> <span style="color:#00bcd4; font-weight:bold;">{options_rec['type']}</span></div>
-                <div class="rec-item"><span class="rec-label">الانتهاء:</span> <span>{options_rec['expiration']}</span></div>
-                <div class="rec-item"><span class="rec-label">Strike:</span> <span>${options_rec['strike']:.2f}</span></div>
-                <div class="rec-item"><span class="rec-label">سعر العقد:</span> <span style="color:{opt_color}; font-weight:bold;">${options_rec['last_price']:.2f} ({opt_sign}{options_rec['change']:.2f})</span></div>
-                <div style="border-top: 1px dashed #2a2e39; margin: 6px 0;"></div>
-                <div class="rec-item"><span class="rec-label">هدف الجلسة (+30%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['session_target']:.2f}</span></div>
-                <div class="rec-item"><span class="rec-label">هدف الانتهاء (+100%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['expiry_target']:.2f}</span></div>
-                <div class="rec-item"><span class="rec-label">وقف الخسارة:</span> <span style="color:#ff3d00; font-weight:bold;">${options_rec['stop_loss']:.2f}</span></div>
-                </div>
-                """, unsafe_allow_html=True)
 
         news = fetch_news(selected_ticker)
         news_html = "".join([f"<div class='news-item'>• {n}</div>" for n in news]) if news else "<div class='news-item'>لا توجد أخبار حديثة.</div>"
