@@ -67,7 +67,7 @@ MARKETS = {"🇸🇦 سعودي (Tadawul)": SAUDI_TICKERS, "🇺🇸 أمريك�
 TIMEFRAMES = {"5m": {"interval": "5m", "period": "60d"}, "15m": {"interval": "15m", "period": "60d"}, "1h": {"interval": "60m", "period": "730d"}, "1d": {"interval": "1d", "period": "5y"}}
 
 # ==========================================
-# 3. دوال جلب البيانات والتحليل
+# 3. دوال التحليل (إيجابي وسلبي)
 # ==========================================
 @st.cache_data(ttl=300)
 def fetch_data(ticker, interval, period):
@@ -86,19 +86,21 @@ def fetch_news(ticker):
 
 def analyze_stock(df, ticker):
     if df.empty or len(df) < 50: 
-        return 50, False, "بيانات غير كافية", 0, 0, 0, "لا توجد بيانات"
+        return 50, False, False, "بيانات غير كافية", 0, 0, 0, "لا توجد بيانات"
 
     close, high, low, open_p, volume = df['Close'], df['High'], df['Low'], df['Open'], df['Volume']
     current_price = close.iloc[-1]
     prev_close = close.iloc[-2]
     atr = (high - low).rolling(14).mean().iloc[-1]
 
-    # فحص المتوسطات
+    # المتوسطات
     sma20 = close.rolling(20).mean().iloc[-1]
     sma30 = close.rolling(30).mean().iloc[-1]
     sma50 = close.rolling(50).mean().iloc[-1]
     
+    # 🌟 الشروط الجديدة: إيجابي (فوق) وسلبي (تحت)
     is_above_mas = (current_price > sma20) and (sma20 > sma30) and (sma30 > sma50)
+    is_below_mas = (current_price < sma20) and (sma20 < sma30) and (sma30 < sma50)
 
     score = 50
     breakdown = ["نقاط البداية: 50"]
@@ -106,6 +108,9 @@ def analyze_stock(df, ticker):
     if is_above_mas:
         score += 20
         breakdown.append("فوق متوسط 20/30/50: +20")
+    elif is_below_mas:
+        score -= 20
+        breakdown.append("تحت متوسط 20/30/50: -20")
 
     # مؤشرات الزخم
     delta = close.diff()
@@ -145,6 +150,7 @@ def analyze_stock(df, ticker):
     score = max(10, min(95, score))
     breakdown.append(f"<b>الإجمالي: {score}%</b>")
     
+    # التوصيات (شراء للصاعد، بيع للهابط)
     if score >= 70 and is_above_mas:
         rec = "شراء قوي (STRONG BUY)"
         intraday_target = current_price + (atr * 1.0)
@@ -155,13 +161,23 @@ def analyze_stock(df, ticker):
         intraday_target = current_price + (atr * 0.5)
         swing_target = current_price + (atr * 2.0)
         stop_loss = current_price - (atr * 1.5)
+    elif score <= 30 and is_below_mas:
+        rec = "بيع قوي (STRONG SELL)"
+        intraday_target = current_price - (atr * 1.0)
+        swing_target = current_price - (atr * 3.0)
+        stop_loss = current_price + (atr * 1.5)
+    elif score <= 45 and is_below_mas:
+        rec = "بيع (SELL)"
+        intraday_target = current_price - (atr * 0.5)
+        swing_target = current_price - (atr * 2.0)
+        stop_loss = current_price + (atr * 1.5)
     else:
         rec = "احتفاظ (HOLD)"
         intraday_target = current_price
         swing_target = current_price
         stop_loss = current_price - (atr * 1.5)
 
-    return score, is_above_mas, rec, intraday_target, swing_target, stop_loss, "<br>".join(breakdown)
+    return score, is_above_mas, is_below_mas, rec, intraday_target, swing_target, stop_loss, "<br>".join(breakdown)
 
 @st.cache_data(ttl=600)
 def evaluate_tickers(tickers):
@@ -170,44 +186,56 @@ def evaluate_tickers(tickers):
         try:
             df = fetch_data(t, "1d", "1y")
             if len(df) < 50: continue
-            score, is_above_mas, rec, _, _, _, _ = analyze_stock(df, t)
-            results[t] = {'score': score, 'is_above_mas': is_above_mas, 'rec': rec}
-            time.sleep(0.1) # تأخير بسيط لتجنب الحظر
+            score, is_above_mas, is_below_mas, rec, _, _, _, _ = analyze_stock(df, t)
+            results[t] = {'score': score, 'is_above_mas': is_above_mas, 'is_below_mas': is_below_mas, 'rec': rec}
+            time.sleep(0.1)
         except: pass
     return results
 
 # ==========================================
-# 4. واجهة المستخدم
+# 4. واجهة المستخدم (إضافة الفلتر)
 # ==========================================
 col_chart, col_sidebar = st.columns([2.5, 1], gap="medium")
 
 with col_chart:
-    c1, c2 = st.columns([2, 1])
+    # 🌟 إضافة اختيار الفلتر (إيجابي / سلبي / الكل)
+    c1, c2, c3 = st.columns([1.5, 1.5, 1])
     with c1:
         market_options = list(MARKETS.keys())
         selected_market = st.selectbox("السوق", market_options, index=1, label_visibility="collapsed")
     with c2:
-        selected_timeframe = st.selectbox("الإطار الزمني", list(TIMEFRAMES.keys()), index=3, label_visibility="collapsed")
+        filter_mode = st.selectbox("الفلتر", ["الكل ⚖️", "إيجابي (فوق المتوسطات) 🚀", "سلبي (تحت المتوسطات) 🔻"], label_visibility="collapsed")
+    with c3:
+        selected_timeframe = st.selectbox("الإطار", list(TIMEFRAMES.keys()), index=3, label_visibility="collapsed")
 
     tickers_list = MARKETS[selected_market]
     
-    with st.spinner("جاري فلترة الأسهم فوق المتوسطات وتحليلها..."):
+    with st.spinner("جاري فلترة وتحليل الأسهم..."):
         eval_data = evaluate_tickers(tickers_list)
 
-    # فلترة: عرض الأسهم اللي فوق المتوسطات بس ومرتبة
-    strong_tickers = [t for t, data in eval_data.items() if data['is_above_mas']]
-    strong_tickers = sorted(strong_tickers, key=lambda x: eval_data[x]['score'], reverse=True)
+    # تطبيق الفلتر
+    if filter_mode == "إيجابي (فوق المتوسطات) 🚀":
+        filtered_tickers = [t for t, data in eval_data.items() if data['is_above_mas']]
+    elif filter_mode == "سلبي (تحت المتوسطات) 🔻":
+        filtered_tickers = [t for t, data in eval_data.items() if data['is_below_mas']]
+    else:
+        filtered_tickers = list(eval_data.keys())
 
-    if not strong_tickers:
-        st.warning("لا توجد أسهم تتداول فوق متوسط 20 و 30 و 50 حالياً في هذا السوق.")
+    # الترتيب حسب التقييم
+    filtered_tickers = sorted(filtered_tickers, key=lambda x: eval_data[x]['score'], reverse=True)
+
+    if not filtered_tickers:
+        st.warning(f"لا توجد أسهم تتطابق مع الفلتر المختار ({filter_mode}) حالياً.")
         st.stop()
 
-    # 🌟 إزالة أيقونة العقد 📄 من هنا
     def format_ticker(t):
-        s = eval_data[t]['score']
-        return f"🚀 {COMPANY_NAMES.get(t, t)} ({t})"
+        data = eval_data[t]
+        if data['is_above_mas']: prefix = "🚀"
+        elif data['is_below_mas']: prefix = "🔻"
+        else: prefix = "⚖️"
+        return f"{prefix} {COMPANY_NAMES.get(t, t)} ({t})"
 
-    selected_ticker = st.selectbox("الأسهم الإيجابية (فوق المتوسطات):", strong_tickers, format_func=format_ticker, label_visibility="collapsed")
+    selected_ticker = st.selectbox("اختر السهم:", filtered_tickers, format_func=format_ticker, label_visibility="collapsed")
 
     # --- رسم الشارت ---
     tf_config = TIMEFRAMES[selected_timeframe]
@@ -237,7 +265,6 @@ with col_chart:
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.8, 0.2])
         fig.add_trace(go.Candlestick(x=df_plot.index, open=df_plot['Open'], high=df_plot['High'], low=df_plot['Low'], close=df_plot['Close'], name="Price", increasing_line_color='#089981', decreasing_line_color='#f23645'), row=1, col=1)
         
-        # رسم المتوسطات الـ 3
         fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_20'], mode='lines', name='SMA 20', line=dict(color='#ff9800', width=1.5)), row=1, col=1)
         fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_30'], mode='lines', name='SMA 30', line=dict(color='#2196f3', width=1.5)), row=1, col=1)
         fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_50'], mode='lines', name='SMA 50', line=dict(color='#9c27b0', width=1.5)), row=1, col=1)
@@ -250,11 +277,14 @@ with col_chart:
 
 with col_sidebar:
     if not df.empty:
-        score, is_above_mas, recommendation, intraday_t, swing_t, stock_sl, breakdown = analyze_stock(df, selected_ticker)
-        score_color = "#00c853" if score >= 60 else "#ff9800"
+        score, is_above_mas, is_below_mas, recommendation, intraday_t, swing_t, stock_sl, breakdown = analyze_stock(df, selected_ticker)
+        
+        if score >= 60: score_color = "#00c853"
+        elif score <= 40: score_color = "#ff3d00"
+        else: score_color = "#ff9800"
 
         st.markdown(f"""
-        <div class="side-card live-card">
+        <div class="side-card live-card" style="border-left-color: {score_color};">
         <div class="card-title">🧠 محرك التحليل</div>
         <div class="score-badge" style="background-color: {score_color}20; color: {score_color}; border: 1px solid {score_color};">
             درجة الثقة: {score}%
