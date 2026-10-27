@@ -22,28 +22,23 @@ footer {visibility: hidden;}
 .stApp { background-color: #000000; color: #ffffff; }
 .block-container { padding-top: 0.5rem; padding-bottom: 2rem; max-width: 100%; }
 
-/* إخفاء الكيبورد */
 div[data-baseweb="select"] input {
     pointer-events: none !important;
     user-select: none !important;
     caret-color: transparent !important;
 }
 
-/* تنسيق الشريط العلوي */
 .top-bar { display: flex; align-items: center; justify-content: space-between; padding: 5px 10px; font-family: sans-serif; margin-bottom: 5px;}
 .ticker-name { font-size: 22px; font-weight: bold; color: #fff; }
-.ohlc-data { color: #d1d4dc; font-weight: bold; font-size: 13px;}
 .green-text { color: #00c853; }
 .red-text { color: #ff3d00; }
 
-/* تنسيق الكروت */
 .side-card { background-color: #131722; border: 1px solid #2a2e39; border-radius: 8px; padding: 15px; margin-bottom: 15px;}
 .live-card { border-left: 4px solid #00c853; }
 .options-card { border-left: 4px solid #00bcd4; }
 .general-card { border-left: 4px solid #ff9800; }
 .card-title { color: #d1d4dc; font-size: 15px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #2a2e39; padding-bottom: 5px;}
 
-/* تنسيق الأسعار زي TradingView */
 .tv-price-box { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin-bottom: 15px; }
 .tv-live-price { font-size: 38px; font-weight: bold; color: #fff; margin: 0; line-height: 1; letter-spacing: -0.5px;}
 .tv-currency { font-size: 18px; color: #b2b5be; font-weight: normal;}
@@ -80,7 +75,7 @@ MARKETS = {"🇺🇸 أمريكي (US)": US_TICKERS, "📊 المؤشرات (Ind
 TIMEFRAMES = {"1m": {"interval": "1m", "period": "7d"}, "5m": {"interval": "5m", "period": "60d"}, "15m": {"interval": "15m", "period": "60d"}, "30m": {"interval": "30m", "period": "60d"}, "1h": {"interval": "60m", "period": "730d"}, "1d": {"interval": "1d", "period": "5y"}}
 
 # ==========================================
-# 3. دوال جلب البيانات (تم إصلاحها)
+# 3. دوال جلب البيانات
 # ==========================================
 @st.cache_data(ttl=60)
 def fetch_data(ticker, interval, period):
@@ -92,56 +87,53 @@ def fetch_data(ticker, interval, period):
         return df
     except: return pd.DataFrame()
 
-# 🌟 دالة جديدة ومُحسنة لجلب السعر اللحظي والبري ماركت باستخدام prepost=True
+# 🌟 دالة محدثة لجلب السعر وبري ماركت وبوست ماركت
 @st.cache_data(ttl=60)
 def get_live_quote(ticker):
     try:
         t = yf.Ticker(ticker)
         
-        # 1. جلب سعر الإغلاق السابق لحساب نسبة التغيير
-        # نستخدم history بدون prepost لأننا نريد سعر الإغلاق الرسمي للجلسة
-        df_daily = t.history(period="5d", interval="1d")
-        if df_daily.empty: return None
-        prev_close = df_daily['Close'].iloc[-2] if len(df_daily) > 1 else df_daily['Close'].iloc[-1]
-        
-        # 2. جلب أحدث سعر لحظي (بما في ذلك البري ماركت) باستخدام prepost=True
-        # نأخذ آخر شمعة دقيقة متاحة
-        df_live = t.history(period="1d", interval="1m", prepost=True)
-        if df_live.empty: return None
-        live_price = df_live['Close'].iloc[-1]
-        
-        # 3. حساب التغيير للسعر اللحظي
-        live_change = live_price - prev_close
-        live_change_pct = (live_change / prev_close) * 100
-
-        # 4. فصل سعر البري ماركت عن السعر العادي
-        # نحن بحاجة لمعرفة ما إذا كانت الشمعة الأخيرة هي بري ماركت أم لا.
-        # نعتمد على info للحصول على سعر البري ماركت الرسمي إذا كان متاحاً
+        # بنجيب الداتا من info (بتحتوي على pre و post)
         info = t.info
-        pre_price = info.get('preMarketPrice')
         
-        # إذا لم نجد preMarketPrice في info، نستخدم آخر سعر من history إذا كان الوقت خارج ساعات العمل
-        # (هذا تقدير تقريبي، لكنه أفضل من لا شيء)
-        pre_change = None
-        pre_change_pct = None
+        live_price = info.get('regularMarketPrice') or info.get('currentPrice')
+        prev_close = info.get('regularMarketPreviousClose')
+        
+        if not live_price:
+            hist = t.history(period="1d", interval="1m", prepost=True)
+            if not hist.empty:
+                live_price = hist['Close'].iloc[-1]
+        
+        if not live_price: return None
+        if not prev_close: prev_close = live_price
+
+        live_change = live_price - prev_close
+        live_change_pct = (live_change / prev_close) * 100 if prev_close else 0
+
+        # البري ماركت
+        pre_price = info.get('preMarketPrice')
+        pre_change = info.get('preMarketChange')
+        pre_change_pct = info.get('preMarketChangePercent')
         
         if pre_price:
-            pre_change = pre_price - prev_close
-            pre_change_pct = (pre_change / prev_close) * 100
-        else:
-            # محاولة استنتاج ما إذا كان السعر الحالي هو بري ماركت
-            # (هذا الجزء معقد لأن yfinance لا يعطي علامة واضحة، لكننا سنحاول)
-            # إذا كان الوقت الحالي قبل 9:30 صباحاً بتوقيت نيويورك، فمن المحتمل أن يكون بري ماركت
-            # نستخدم هذا كخيار احتياطي
-            pass
+            if not pre_change: pre_change = pre_price - prev_close
+            if not pre_change_pct: pre_change_pct = (pre_change / prev_close) * 100
+
+        # البوست ماركت (عشان الكود ميكسرش)
+        post_price = info.get('postMarketPrice')
+        post_change = info.get('postMarketChange')
+        post_change_pct = info.get('postMarketChangePercent')
+        
+        if post_price:
+            if not post_change: post_change = post_price - prev_close
+            if not post_change_pct: post_change_pct = (post_change / prev_close) * 100
 
         return {
             "live_price": live_price, "live_change": live_change, "live_change_pct": live_change_pct,
             "pre_price": pre_price, "pre_change": pre_change, "pre_change_pct": pre_change_pct,
-            "prev_close": prev_close
+            "post_price": post_price, "post_change": post_change, "post_change_pct": post_change_pct
         }
-    except Exception as e:
-        print(f"Error fetching live quote for {ticker}: {e}")
+    except: 
         return None
 
 @st.cache_data(ttl=300)
@@ -151,7 +143,6 @@ def fetch_news(ticker):
         return [n['title'] for n in news[:3]] if news else []
     except: return []
 
-# ... (باقي دوال التحليل analyze_stock, evaluate_tickers, get_options_recommendation تبقى كما هي) ...
 def analyze_stock(df, ticker, live_price):
     if df.empty or len(df) < 50 or not live_price: return 50, False, False, "بيانات غير كافية", 0, 0, 0, "لا توجد بيانات"
     close, high, low, volume = df['Close'], df['High'], df['Low'], df['Volume']
@@ -279,23 +270,27 @@ if selected_ticker:
     quote = get_live_quote(selected_ticker)
 
     if not df.empty and quote:
-        live_price = quote['live_price']; live_change = quote['live_change']; live_change_pct = quote['live_change_pct']
+        live_price = quote.get('live_price')
+        live_change = quote.get('live_change', 0)
+        live_change_pct = quote.get('live_change_pct', 0)
+        
         main_color = "#00c853" if live_change >= 0 else "#ff3d00"; main_sign = "+" if live_change >= 0 else ""
 
+        # 🌟 استخدام .get() عشان نمنع أي KeyError
         pre_html = ""
-        if quote['pre_price']:
-            pre_color = "#00c853" if quote['pre_change'] >= 0 else "#ff3d00"; pre_sign = "+" if quote['pre_change'] >= 0 else ""
+        if quote.get('pre_price'):
+            pre_color = "#00c853" if quote.get('pre_change', 0) >= 0 else "#ff3d00"; pre_sign = "+" if quote.get('pre_change', 0) >= 0 else ""
             pre_html = f"""
             <p class="tv-pre-label">🌗 Pre-market</p>
-            <p class="tv-pre-price">{quote['pre_price']:.2f} <span class="tv-currency">USD</span></p>
-            <p class="tv-pre-change" style="color: {pre_color};">{pre_sign}{quote['pre_change']:.2f} ({pre_sign}{quote['pre_change_pct']:.2f}%)</p>
+            <p class="tv-pre-price">{quote.get('pre_price'):.2f} <span class="tv-currency">USD</span></p>
+            <p class="tv-pre-change" style="color: {pre_color};">{pre_sign}{quote.get('pre_change', 0):.2f} ({pre_sign}{quote.get('pre_change_pct', 0):.2f}%)</p>
             """
-        elif quote['post_price']:
-            post_color = "#00c853" if quote['post_change'] >= 0 else "#ff3d00"; post_sign = "+" if quote['post_change'] >= 0 else ""
+        elif quote.get('post_price'):
+            post_color = "#00c853" if quote.get('post_change', 0) >= 0 else "#ff3d00"; post_sign = "+" if quote.get('post_change', 0) >= 0 else ""
             pre_html = f"""
             <p class="tv-pre-label">🌙 After-hours</p>
-            <p class="tv-pre-price">{quote['post_price']:.2f} <span class="tv-currency">USD</span></p>
-            <p class="tv-pre-change" style="color: {post_color};">{post_sign}{quote['post_change']:.2f} ({post_sign}{quote['post_change_pct']:.2f}%)</p>
+            <p class="tv-pre-price">{quote.get('post_price'):.2f} <span class="tv-currency">USD</span></p>
+            <p class="tv-pre-change" style="color: {post_color};">{post_sign}{quote.get('post_change', 0):.2f} ({post_sign}{quote.get('post_change_pct', 0):.2f}%)</p>
             """
 
         display_name_header = COMPANY_NAMES.get(selected_ticker, selected_ticker)
@@ -320,7 +315,6 @@ if selected_ticker:
         score, is_above_mas, is_below_mas, recommendation, intraday_t, swing_t, stock_sl, breakdown = analyze_stock(df, selected_ticker, live_price)
         score_color = "#00c853" if score >= 60 else ("#ff3d00" if score <= 40 else "#ff9800")
 
-        # 🌟 عرض السعر الحقيقي والبري ماركت (ثابتين مهما تغير الفريم)
         st.markdown(f"""
         <div class="side-card live-card" style="border-left-color: {score_color};">
         <div class="card-title">🧠 محرك التحليل ({selected_timeframe})</div>
