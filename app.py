@@ -9,7 +9,7 @@ import datetime
 import time
 
 # ==========================================
-# 1. إعدادات الصفحة والتصميم
+# 1. إعدادات الصفحة والتصميم (أسود بالكامل زي Webull)
 # ==========================================
 st.set_page_config(page_title="Pro Trading Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
@@ -18,35 +18,39 @@ st.markdown("""
 #MainMenu {visibility: hidden;}
 header {visibility: hidden;}
 footer {visibility: hidden;}
-.stApp { background-color: #131722; color: #d1d4dc; }
-.block-container { padding-top: 0.5rem; padding-bottom: 1rem; max-width: 98%; }
 
+/* خلفية سوداء بالكامل */
+.stApp { background-color: #000000; color: #ffffff; }
+.block-container { padding-top: 0.5rem; padding-bottom: 2rem; max-width: 100%; }
+
+/* إخفاء الكيبورد في القائمة المنسدلة */
 div[data-baseweb="select"] input { display: none !important; }
 
-.top-bar { display: flex; align-items: center; gap: 10px; padding: 5px; font-family: sans-serif; margin-bottom: 5px; flex-wrap: wrap;}
-.ticker-name { font-size: 18px; font-weight: bold; color: #fff; }
-.ohlc-data { color: #d1d4dc; font-weight: bold; font-size: 12px;}
-.green-text { color: #089981; }
-.red-text { color: #f23645; }
+/* تنسيق الشريط العلوي */
+.top-bar { display: flex; align-items: center; justify-content: space-between; padding: 5px 10px; font-family: sans-serif; margin-bottom: 5px;}
+.ticker-name { font-size: 22px; font-weight: bold; color: #fff; }
+.ohlc-data { color: #d1d4dc; font-weight: bold; font-size: 13px;}
+.green-text { color: #00c853; }
+.red-text { color: #ff3d00; }
 
-.side-card { background-color: #1e222d; border: 1px solid #2a2e39; border-radius: 8px; padding: 12px; margin-bottom: 12px;}
+/* تنسيق الكروت السفلية */
+.side-card { background-color: #131722; border: 1px solid #2a2e39; border-radius: 8px; padding: 15px; margin-bottom: 15px;}
 .live-card { border-left: 4px solid #00c853; }
 .options-card { border-left: 4px solid #00bcd4; }
-.card-title { color: #d1d4dc; font-size: 13px; font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #2a2e39; padding-bottom: 5px;}
-.price-text { font-size: 20px; font-weight: bold; margin: 0; }
-.change-text { font-size: 12px; margin: 0; margin-bottom: 8px;}
-.rec-item { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px;}
+.general-card { border-left: 4px solid #ff9800; }
+.card-title { color: #d1d4dc; font-size: 15px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #2a2e39; padding-bottom: 5px;}
+.price-text { font-size: 26px; font-weight: bold; margin: 0; }
+.pre-market-text { font-size: 13px; color: #ff9800; font-weight: bold; margin: 0; margin-top: 2px;}
+.change-text { font-size: 14px; margin: 0; margin-bottom: 10px;}
+.rec-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;}
 .rec-label { color: #888; }
-.news-item { font-size: 11px; margin-bottom: 6px; color: #d1d4dc; line-height: 1.4;}
-.score-badge { font-size: 22px; font-weight: bold; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 5px;}
-.points-details { font-size: 10px; color: #9ca3af; text-align: right; margin-top: 5px; line-height: 1.6; border-top: 1px dashed #2a2e39; padding-top: 8px; }
+.news-item { font-size: 12px; margin-bottom: 8px; color: #d1d4dc; line-height: 1.4;}
+.score-badge { font-size: 24px; font-weight: bold; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 10px;}
+.points-details { font-size: 11px; color: #9ca3af; text-align: right; margin-top: 5px; line-height: 1.6; border-top: 1px dashed #2a2e39; padding-top: 8px; }
 
-@media (max-width: 768px) {
-    .block-container { padding: 0rem !important; }
-    .side-card { border-radius: 0; margin-bottom: 5px; border-left: none; border-bottom: 2px solid #2a2e39; }
-    .top-bar { padding: 2px; }
-    .ticker-name { font-size: 16px; }
-}
+/* ثبيت الشارت في مكانه */
+.stPlotlyChart { position: sticky; top: 0; z-index: 999; background-color: #000000; padding-bottom: 5px;}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -65,26 +69,13 @@ US_TICKERS = [
     "COIN", "HOOD", "SOFI", "AI", "PATH", "NET", "DDOG", "CRWD", "OKTA", "PANW"
 ]
 
-# 🌟 ضفنا تاسي و S&P 500 بأسماء واضحة
 INDICES = {
-    "S&P 500": "^GSPC", 
-    "NASDAQ": "^IXIC", 
-    "Dow Jones": "^DJI", 
-    "Russell 2000": "^RUT", 
-    "VIX (التقلب)": "^VIX",
-    "TASI (تاسي)": "^TASI.SR"
+    "S&P 500": "^GSPC", "NASDAQ": "^IXIC", "Dow Jones": "^DJI", 
+    "Russell 2000": "^RUT", "VIX (التقلب)": "^VIX", "TASI (تاسي)": "^TASI.SR"
 }
 
 COMPANY_NAMES = {
-    # 🌟 أسماء المؤشرات
-    "^GSPC": "S&P 500", 
-    "^IXIC": "NASDAQ", 
-    "^DJI": "Dow Jones", 
-    "^RUT": "Russell 2000", 
-    "^VIX": "VIX", 
-    "^TASI.SR": "TASI (تاسي)",
-
-    # أسماء الأسهم الأمريكية
+    "^GSPC": "S&P 500", "^IXIC": "NASDAQ", "^DJI": "Dow Jones", "^RUT": "Russell 2000", "^VIX": "VIX", "^TASI.SR": "TASI (تاسي)",
     "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet", "AMZN": "Amazon", "TSLA": "Tesla", 
     "NVDA": "NVIDIA", "META": "Meta", "NFLX": "Netflix", "AMD": "AMD", "INTC": "Intel", 
     "JPM": "JPMorgan", "V": "Visa", "WMT": "Walmart", "DIS": "Disney", "ORCL": "Oracle", 
@@ -128,11 +119,22 @@ def fetch_data(ticker, interval, period):
         return df
     except: return pd.DataFrame()
 
+@st.cache_data(ttl=60)
+def fetch_extended_hours(ticker):
+    try:
+        info = yf.Ticker(ticker).info
+        pre = info.get('preMarketPrice')
+        post = info.get('postMarketPrice')
+        if pre: return pre, "PRE"
+        if post: return post, "POST"
+        return None, None
+    except: return None, None
+
 @st.cache_data(ttl=300)
 def fetch_news(ticker):
     try:
         news = yf.Ticker(ticker).news
-        return [n['title'] for n in news[:2]] if news else []
+        return [n['title'] for n in news[:3]] if news else []
     except: return []
 
 def analyze_stock(df, ticker):
@@ -252,109 +254,122 @@ def evaluate_tickers(tickers, interval, period):
     return results
 
 # ==========================================
-# 4. واجهة المستخدم
+# 4. واجهة المستخدم (فوق وتحت)
 # ==========================================
-col_chart, col_sidebar = st.columns([2.5, 1], gap="medium")
 
-with col_chart:
-    c1, c2, c3 = st.columns([1.5, 1.5, 1])
-    with c1:
-        market_options = list(MARKETS.keys())
-        selected_market = st.selectbox("السوق", market_options, index=0, label_visibility="collapsed")
-    with c2:
-        filter_mode = st.selectbox("الفلتر", ["الكل ⚖️", "إيجابي (فوق المتوسطات) 🚀", "سلبي (تحت المتوسطات) 🔻"], label_visibility="collapsed")
-    with c3:
-        selected_timeframe = st.selectbox("الإطار", list(TIMEFRAMES.keys()), index=3, label_visibility="collapsed")
+# --- 1. القوائم المنسدلة فوق خالص ---
+c1, c2, c3 = st.columns([1.5, 1.5, 1])
+with c1:
+    market_options = list(MARKETS.keys())
+    selected_market = st.selectbox("السوق", market_options, index=0, label_visibility="collapsed")
+with c2:
+    filter_mode = st.selectbox("الفلتر", ["الكل ⚖️", "إيجابي (فوق المتوسطات) 🚀", "سلبي (تحت المتوسطات) 🔻"], label_visibility="collapsed")
+with c3:
+    selected_timeframe = st.selectbox("الإطار", list(TIMEFRAMES.keys()), index=3, label_visibility="collapsed")
 
-    tf_config = TIMEFRAMES[selected_timeframe]
+tf_config = TIMEFRAMES[selected_timeframe]
 
-    if selected_market == "📊 المؤشرات (Indices)":
-        # بناخد الرموز من القاموس
-        ticker_symbols = list(INDICES.values())
-        custom_ticker = st.text_input("أو اكتب رمز المؤشر يدوياً (مثال: ^GSPC):", "").strip().upper()
+if selected_market == "📊 المؤشرات (Indices)":
+    ticker_symbols = list(INDICES.values())
+    custom_ticker = st.text_input("أو اكتب رمز المؤشر يدوياً (مثال: ^GSPC):", "").strip().upper()
+else:
+    ticker_symbols = US_TICKERS
+    custom_ticker = st.text_input("أو اكتب رمز السهم يدوياً (مثال: AAPL, TSLA):", "").strip().upper()
+
+with st.spinner(f"جاري تحديث البيانات بناءً على فريم {selected_timeframe}..."):
+    eval_data = evaluate_tickers(ticker_symbols, tf_config["interval"], tf_config["period"])
+
+if filter_mode == "إيجابي (فوق المتوسطات) 🚀":
+    filtered_tickers = [t for t in ticker_symbols if eval_data.get(t, {}).get('is_above_mas', False)]
+elif filter_mode == "سلبي (تحت المتوسطات) 🔻":
+    filtered_tickers = [t for t in ticker_symbols if eval_data.get(t, {}).get('is_below_mas', False)]
+else:
+    filtered_tickers = ticker_symbols
+
+if not filtered_tickers:
+    st.warning(f"لا توجد أسهم تتطابق مع الفلتر المختار ({filter_mode}) على فريم {selected_timeframe}. تم عرض كل الأسهم بدلاً من ذلك.")
+    filtered_tickers = ticker_symbols
+
+filtered_tickers = sorted(filtered_tickers, key=lambda x: eval_data.get(x, {}).get('score', 0), reverse=True)
+
+def format_ticker(t):
+    data = eval_data.get(t, {'is_above_mas': False, 'is_below_mas': False, 'score': 50})
+    if data.get('is_above_mas'): prefix = "🚀"
+    elif data.get('is_below_mas'): prefix = "🔻"
+    else: prefix = "⚖️"
+    
+    display_name = COMPANY_NAMES.get(t, t) 
+    
+    if display_name == t:
+        return f"{prefix} {t} - {data.get('score', 50)}%"
     else:
-        ticker_symbols = US_TICKERS
-        custom_ticker = st.text_input("أو اكتب رمز السهم يدوياً (مثال: AAPL, TSLA):", "").strip().upper()
+        return f"{prefix} {display_name} ({t}) - {data.get('score', 50)}%"
 
-    with st.spinner(f"جاري تحديث البيانات بناءً على فريم {selected_timeframe}..."):
-        eval_data = evaluate_tickers(ticker_symbols, tf_config["interval"], tf_config["period"])
+# اختيار السهم
+selected_ticker = st.selectbox("اختر السهم:", filtered_tickers, format_func=format_ticker, label_visibility="collapsed")
+if custom_ticker:
+    selected_ticker = custom_ticker
 
-    if filter_mode == "إيجابي (فوق المتوسطات) 🚀":
-        filtered_tickers = [t for t in ticker_symbols if eval_data.get(t, {}).get('is_above_mas', False)]
-    elif filter_mode == "سلبي (تحت المتوسطات) 🔻":
-        filtered_tickers = [t for t in ticker_symbols if eval_data.get(t, {}).get('is_below_mas', False)]
-    else:
-        filtered_tickers = ticker_symbols
+# --- 2. الشارت في النص (ثابت) ---
+if selected_ticker:
+    df = fetch_data(selected_ticker, tf_config["interval"], tf_config["period"])
 
-    if not filtered_tickers:
-        st.warning(f"لا توجد أسهم تتطابق مع الفلتر المختار ({filter_mode}) على فريم {selected_timeframe}. تم عرض كل الأسهم بدلاً من ذلك.")
-        filtered_tickers = ticker_symbols
+    if not df.empty:
+        current_price = df['Close'].iloc[-1].item()
+        prev_close = df['Close'].iloc[-2].item()
+        change = current_price - prev_close
+        change_pct = (change / prev_close) * 100
+        color = "#00c853" if change >= 0 else "#ff3d00"
+        sign = "+" if change >= 0 else ""
 
-    filtered_tickers = sorted(filtered_tickers, key=lambda x: eval_data.get(x, {}).get('score', 0), reverse=True)
+        pre_price, pre_type = fetch_extended_hours(selected_ticker)
+        pre_html = f'<p class="pre-market-text">{pre_type}: ${pre_price:.2f}</p>' if pre_price else ""
 
-    # 🌟 هنا الفورمات اللي بيجيب الاسم الحقيقي من COMPANY_NAMES
-    def format_ticker(t):
-        data = eval_data.get(t, {'is_above_mas': False, 'is_below_mas': False, 'score': 50})
-        if data.get('is_above_mas'): prefix = "🚀"
-        elif data.get('is_below_mas'): prefix = "🔻"
-        else: prefix = "⚖️"
+        display_name_header = COMPANY_NAMES.get(selected_ticker, selected_ticker)
         
-        # لو السهم في القاموس، بيجيب اسمه، لو لأ بيجيب الرمز
-        display_name = COMPANY_NAMES.get(t, t) 
+        st.markdown(f"""
+        <div class="top-bar">
+            <span class="ticker-name">{display_name_header} · {selected_ticker} · {selected_timeframe}</span>
+            <span class="ohlc-data">C {current_price:.2f}</span>
+            <span class="{'green-text' if change >= 0 else 'red-text'}" style="font-weight:bold;">{sign}{change:.2f} ({sign}{change_pct:.2f}%)</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        df_plot = df.tail(100).copy()
+        df_plot['SMA_20'] = df['Close'].rolling(window=20).mean().tail(100)
+        df_plot['SMA_30'] = df['Close'].rolling(window=30).mean().tail(100)
+        df_plot['SMA_50'] = df['Close'].rolling(window=50).mean().tail(100)
+
+        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.8, 0.2])
+        fig.add_trace(go.Candlestick(x=df_plot.index, open=df_plot['Open'], high=df_plot['High'], low=df_plot['Low'], close=df_plot['Close'], name="Price", increasing_line_color='#00c853', decreasing_line_color='#ff3d00'), row=1, col=1)
         
-        # لو الاسم هو نفسه الرمز، منكتبهوش مرتين
-        if display_name == t:
-            return f"{prefix} {t} - {data.get('score', 50)}%"
-        else:
-            return f"{prefix} {display_name} ({t}) - {data.get('score', 50)}%"
+        fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_20'], mode='lines', name='SMA 20', line=dict(color='#ff9800', width=1.2)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_30'], mode='lines', name='SMA 30', line=dict(color='#2196f3', width=1.2)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_50'], mode='lines', name='SMA 50', line=dict(color='#9c27b0', width=1.2)), row=1, col=1)
+        
+        colors = ['#00c853' if close >= open else '#ff3d00' for open, close in zip(df_plot['Open'], df_plot['Close'])]
+        fig.add_trace(go.Bar(x=df_plot.index, y=df_plot['Volume'], name="Volume", marker_color=colors), row=2, col=1)
+        
+        # خلفية سوداء بالكامل زي التطبيق
+        fig.update_layout(
+            template="plotly_dark", 
+            paper_bgcolor='#000000', 
+            plot_bgcolor='#000000', 
+            height=350, # طول مناسب للموبايل
+            autosize=True, 
+            margin=dict(l=0, r=0, t=10, b=0), 
+            showlegend=False, 
+            dragmode="pan", 
+            hovermode="x unified", 
+            xaxis=dict(showgrid=True, gridcolor='#2a2e39', fixedrange=False),
+            yaxis=dict(showgrid=True, gridcolor='#2a2e39', side='right', fixedrange=False)
+        )
+        fig.update_yaxes(showgrid=False, side='right', row=2, col=1, fixedrange=False)
+        
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
 
-    selected_ticker = st.selectbox("اختر السهم:", filtered_tickers, format_func=format_ticker, label_visibility="collapsed")
-
-    if custom_ticker:
-        selected_ticker = custom_ticker
-
-    # --- رسم الشارت ---
-    if selected_ticker:
-        df = fetch_data(selected_ticker, tf_config["interval"], tf_config["period"])
-
-        if not df.empty:
-            current_price = df['Close'].iloc[-1].item()
-            prev_close = df['Close'].iloc[-2].item()
-            change = current_price - prev_close
-            change_pct = (change / prev_close) * 100
-            color = "#00c853" if change >= 0 else "#ff3d00"
-            sign = "+" if change >= 0 else ""
-
-            # هنا في الهيدر بنجيب الاسم الحقيقي
-            display_name_header = COMPANY_NAMES.get(selected_ticker, selected_ticker)
-            st.markdown(f"""
-            <div class="top-bar">
-                <span class="ticker-name">{display_name_header} · {selected_ticker} · {selected_timeframe}</span>
-                <span class="ohlc-data">C {current_price:.2f}</span>
-                <span class="{'green-text' if change >= 0 else 'red-text'}" style="font-weight:bold;">{sign}{change:.2f} ({sign}{change_pct:.2f}%)</span>
-            </div>
-            """, unsafe_allow_html=True)
-
-            df_plot = df.tail(100).copy()
-            df_plot['SMA_20'] = df['Close'].rolling(window=20).mean().tail(100)
-            df_plot['SMA_30'] = df['Close'].rolling(window=30).mean().tail(100)
-            df_plot['SMA_50'] = df['Close'].rolling(window=50).mean().tail(100)
-
-            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.8, 0.2])
-            fig.add_trace(go.Candlestick(x=df_plot.index, open=df_plot['Open'], high=df_plot['High'], low=df_plot['Low'], close=df_plot['Close'], name="Price", increasing_line_color='#089981', decreasing_line_color='#f23645'), row=1, col=1)
-            
-            fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_20'], mode='lines', name='SMA 20', line=dict(color='#ff9800', width=1.5)), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_30'], mode='lines', name='SMA 30', line=dict(color='#2196f3', width=1.5)), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_50'], mode='lines', name='SMA 50', line=dict(color='#9c27b0', width=1.5)), row=1, col=1)
-            
-            colors = ['#089981' if close >= open else '#f23645' for open, close in zip(df_plot['Open'], df_plot['Close'])]
-            fig.add_trace(go.Bar(x=df_plot.index, y=df_plot['Volume'], name="Volume", marker_color=colors), row=2, col=1)
-            fig.update_layout(template="plotly_dark", paper_bgcolor='#131722', plot_bgcolor='#131722', height=400, autosize=True, margin=dict(l=5, r=5, t=5, b=5), showlegend=False, dragmode="pan", hovermode="x unified", uirevision='constant', xaxis=dict(showgrid=True, gridcolor='#2a2e39', fixedrange=False), yaxis=dict(showgrid=True, gridcolor='#2a2e39', side='right', fixedrange=False))
-            fig.update_yaxes(showgrid=False, side='right', row=2, col=1, fixedrange=False)
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
-
-with col_sidebar:
-    if selected_ticker and not df.empty:
+    # --- 3. التحليلات والتوصيات تحت خالص ---
+    if not df.empty:
         score, is_above_mas, is_below_mas, recommendation, intraday_t, swing_t, stock_sl, breakdown = analyze_stock(df, selected_ticker)
         
         if score >= 60: score_color = "#00c853"
@@ -367,18 +382,19 @@ with col_sidebar:
         <div class="score-badge" style="background-color: {score_color}20; color: {score_color}; border: 1px solid {score_color};">
             درجة الثقة: {score}%
         </div>
-        <div style="text-align: center; font-weight: bold; font-size: 14px; color: {score_color}; margin-bottom: 5px;">{recommendation}</div>
+        <div style="text-align: center; font-weight: bold; font-size: 16px; color: {score_color}; margin-bottom: 5px;">{recommendation}</div>
         
         <div class="points-details">
             <b>تفصيل النقاط:</b><br>
             {breakdown}
         </div>
         
-        <div style="border-top: 1px solid #2a2e39; margin: 8px 0;"></div>
+        <div style="border-top: 1px solid #2a2e39; margin: 10px 0;"></div>
         <p class="price-text" style="color: {color};">${current_price:.2f}</p>
+        {pre_html}
         <p class="change-text" style="color: {color}; margin-top: 5px;">{sign}{change:.2f} ({sign}{change_pct:.2f}%)</p>
         
-        <div style="background: {score_color}15; padding: 8px; border-radius: 5px; margin-top: 10px;">
+        <div style="background: {score_color}15; padding: 10px; border-radius: 5px; margin-top: 10px;">
             <div class="rec-item"><span class="rec-label">هدف الجلسة:</span> <span style="color:{score_color}; font-weight:bold;">${intraday_t:.2f}</span></div>
             <div class="rec-item"><span class="rec-label">هدف الانتهاء:</span> <span style="color:{score_color}; font-weight:bold;">${swing_t:.2f}</span></div>
             <div class="rec-item"><span class="rec-label">وقف الخسارة:</span> <span style="color:#ff3d00; font-weight:bold;">${stock_sl:.2f}</span></div>
@@ -386,7 +402,6 @@ with col_sidebar:
         </div>
         """, unsafe_allow_html=True)
 
-        # عقود الخيارات للأسهم فقط
         if selected_ticker.isalpha():
             try:
                 stock = yf.Ticker(selected_ticker)
@@ -404,7 +419,7 @@ with col_sidebar:
                             <div class="rec-item"><span class="rec-label">الانتهاء:</span> <span>{stock.options[0]}</span></div>
                             <div class="rec-item"><span class="rec-label">Strike:</span> <span>${chosen['strike']:.2f}</span></div>
                             <div class="rec-item"><span class="rec-label">سعر العقد:</span> <span style="color:#fff; font-weight:bold;">${last_price:.2f}</span></div>
-                            <div style="border-top: 1px dashed #2a2e39; margin: 6px 0;"></div>
+                            <div style="border-top: 1px dashed #2a2e39; margin: 8px 0;"></div>
                             <div class="rec-item"><span class="rec-label">هدف الجلسة (+30%):</span> <span style="color:#00c853; font-weight:bold;">${last_price * 1.30:.2f}</span></div>
                             <div class="rec-item"><span class="rec-label">هدف الانتهاء (+100%):</span> <span style="color:#00c853; font-weight:bold;">${last_price * 2.00:.2f}</span></div>
                             <div class="rec-item"><span class="rec-label">وقف الخسارة (-20%):</span> <span style="color:#ff3d00; font-weight:bold;">${last_price * 0.80:.2f}</span></div>
@@ -416,7 +431,7 @@ with col_sidebar:
         news = fetch_news(selected_ticker)
         news_html = "".join([f"<div class='news-item'>• {n}</div>" for n in news]) if news else "<div class='news-item'>لا توجد أخبار حديثة.</div>"
         st.markdown(f"""
-        <div class="side-card general-card" style="border-left-color: #ff9800;">
+        <div class="side-card general-card">
         <div class="card-title">📰 أخبار السهم</div>
         {news_html}
         </div>
