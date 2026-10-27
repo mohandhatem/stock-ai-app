@@ -22,26 +22,34 @@ footer {visibility: hidden;}
 .stApp { background-color: #000000; color: #ffffff; }
 .block-container { padding-top: 0.5rem; padding-bottom: 2rem; max-width: 100%; }
 
+/* إخفاء الكيبورد */
 div[data-baseweb="select"] input {
     pointer-events: none !important;
     user-select: none !important;
     caret-color: transparent !important;
 }
 
+/* تنسيق الشريط العلوي */
 .top-bar { display: flex; align-items: center; justify-content: space-between; padding: 5px 10px; font-family: sans-serif; margin-bottom: 5px;}
 .ticker-name { font-size: 22px; font-weight: bold; color: #fff; }
 .ohlc-data { color: #d1d4dc; font-weight: bold; font-size: 13px;}
 .green-text { color: #00c853; }
 .red-text { color: #ff3d00; }
 
+/* تنسيق الكروت */
 .side-card { background-color: #131722; border: 1px solid #2a2e39; border-radius: 8px; padding: 15px; margin-bottom: 15px;}
 .live-card { border-left: 4px solid #00c853; }
 .options-card { border-left: 4px solid #00bcd4; }
 .general-card { border-left: 4px solid #ff9800; }
 .card-title { color: #d1d4dc; font-size: 15px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #2a2e39; padding-bottom: 5px;}
-.price-text { font-size: 26px; font-weight: bold; margin: 0; }
-.pre-market-text { font-size: 14px; color: #ff9800; font-weight: bold; margin: 0; margin-top: 2px;}
-.change-text { font-size: 14px; margin: 0; margin-bottom: 10px;}
+
+/* تنسيق الأسعار زي الصورة */
+.main-price { font-size: 32px; font-weight: bold; margin: 0; line-height: 1.1; color: #fff;}
+.main-price-currency { font-size: 16px; color: #888; font-weight: normal;}
+.main-change { font-size: 16px; font-weight: bold; margin: 2px 0 10px 0;}
+.pre-price { font-size: 20px; font-weight: bold; margin: 0; color: #fff;}
+.pre-change { font-size: 14px; font-weight: bold; margin: 2px 0 0 0;}
+
 .rec-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;}
 .rec-label { color: #888; }
 .news-item { font-size: 12px; margin-bottom: 8px; color: #d1d4dc; line-height: 1.4;}
@@ -49,7 +57,6 @@ div[data-baseweb="select"] input {
 .points-details { font-size: 11px; color: #9ca3af; text-align: right; margin-top: 5px; line-height: 1.6; border-top: 1px dashed #2a2e39; padding-top: 8px; }
 
 .stPlotlyChart { background-color: #000000; padding-bottom: 5px;}
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -106,7 +113,7 @@ TIMEFRAMES = {
 }
 
 # ==========================================
-# 3. دوال جلب البيانات والتحليل
+# 3. دوال جلب البيانات
 # ==========================================
 @st.cache_data(ttl=60)
 def fetch_data(ticker, interval, period):
@@ -118,38 +125,65 @@ def fetch_data(ticker, interval, period):
         return df
     except: return pd.DataFrame()
 
-# 🌟 دالة جديدة لجلب السعر اللحظي الثابت (Real-time)
+# 🌟 الدالة السحرية لجلب السعر الحقيقي والبري ماركت مع نسبة التغيير
 @st.cache_data(ttl=60)
 def get_live_quote(ticker):
     try:
         t = yf.Ticker(ticker)
         info = t.info
         
-        # جلب السعر الحالي
+        # 1. السعر الحقيقي اللحظي
         live_price = info.get('regularMarketPrice') or info.get('currentPrice')
         prev_close = info.get('regularMarketPreviousClose')
         
-        # لو مفيش سعر حالي، نجيب آخر إغلاق
         if not live_price:
             hist = t.history(period="1d")
             if not hist.empty:
                 live_price = hist['Close'].iloc[-1]
                 prev_close = live_price
-        
-        # جلب سعر البري ماركت
+                
+        if not prev_close:
+            prev_close = live_price
+
+        live_change = live_price - prev_close
+        live_change_pct = (live_change / prev_close) * 100
+
+        # 2. سعر البري ماركت (PRE)
         pre_price = info.get('preMarketPrice')
-        post_price = info.get('postMarketPrice')
+        pre_change = info.get('preMarketChange')
+        pre_change_pct = info.get('preMarketChangePercent')
         
-        ext_price = None
-        ext_type = None
-        if pre_price and live_price and abs(pre_price - live_price) > 0.01:
-            ext_price, ext_type = pre_price, "PRE"
-        elif post_price and live_price and abs(post_price - live_price) > 0.01:
-            ext_price, ext_type = post_price, "POST"
-            
-        return live_price, prev_close, ext_price, ext_type
+        # حساب التغيير لو مش موجود
+        if pre_price and prev_close:
+            if not pre_change:
+                pre_change = pre_price - prev_close
+            if not pre_change_pct:
+                pre_change_pct = (pre_change / prev_close) * 100
+
+        # 3. سعر البوست ماركت (POST)
+        post_price = info.get('postMarketPrice')
+        post_change = info.get('postMarketChange')
+        post_change_pct = info.get('postMarketChangePercent')
+        
+        if post_price and prev_close:
+            if not post_change:
+                post_change = post_price - prev_close
+            if not post_change_pct:
+                post_change_pct = (post_change / prev_close) * 100
+
+        return {
+            "live_price": live_price,
+            "live_change": live_change,
+            "live_change_pct": live_change_pct,
+            "pre_price": pre_price,
+            "pre_change": pre_change,
+            "pre_change_pct": pre_change_pct,
+            "post_price": post_price,
+            "post_change": post_change,
+            "post_change_pct": post_change_pct
+        }
     except: 
-        return None, None, None, None
+        return None
 
 @st.cache_data(ttl=300)
 def fetch_news(ticker):
@@ -265,9 +299,9 @@ def evaluate_tickers(tickers, interval, period):
     for t in tickers:
         try:
             df = fetch_data(t, interval, period)
-            live_price, _, _, _ = get_live_quote(t)
-            if len(df) < 50 or not live_price: continue
-            score, is_above_mas, is_below_mas, rec, _, _, _, _ = analyze_stock(df, t, live_price)
+            quote = get_live_quote(t)
+            if len(df) < 50 or not quote: continue
+            score, is_above_mas, is_below_mas, rec, _, _, _, _ = analyze_stock(df, t, quote['live_price'])
             results[t] = {'score': score, 'is_above_mas': is_above_mas, 'is_below_mas': is_below_mas, 'rec': rec}
             time.sleep(0.2) 
         except: pass
@@ -357,29 +391,45 @@ if custom_ticker:
 
 if selected_ticker:
     df = fetch_data(selected_ticker, tf_config["interval"], tf_config["period"])
-    # 🌟 جلب السعر اللحظي الثابت
-    live_price, prev_close, ext_price, ext_type = get_live_quote(selected_ticker)
+    quote = get_live_quote(selected_ticker)
 
-    if not df.empty and live_price:
-        # 🌟 استخدام السعر اللحظي في الكارت
-        change = live_price - prev_close if prev_close else 0
-        change_pct = (change / prev_close) * 100 if prev_close else 0
-        color = "#00c853" if change >= 0 else "#ff3d00"
-        sign = "+" if change >= 0 else ""
+    if not df.empty and quote:
+        live_price = quote['live_price']
+        live_change = quote['live_change']
+        live_change_pct = quote['live_change_pct']
         
-        ext_html = f'<p class="pre-market-text">{ext_type}: ${ext_price:.2f}</p>' if ext_price else ""
+        main_color = "#00c853" if live_change >= 0 else "#ff3d00"
+        main_sign = "+" if live_change >= 0 else ""
+
+        # 🌟 تصميم البري ماركت زي الصورة بالظبط
+        pre_html = ""
+        if quote['pre_price']:
+            pre_color = "#00c853" if quote['pre_change'] >= 0 else "#ff3d00"
+            pre_sign = "+" if quote['pre_change'] >= 0 else ""
+            pre_html = f"""
+            <p class="pre-price">{quote['pre_price']:.2f} <span class="main-price-currency">USD</span></p>
+            <p class="pre-change" style="color: {pre_color};">{pre_sign}{quote['pre_change']:.2f} ({pre_sign}{quote['pre_change_pct']:.2f}%)</p>
+            <p style="font-size: 12px; color: #ff9800; margin-top: 2px;">🌗 Pre-market</p>
+            """
+            
+        # البوست ماركت لو مفيش بري ماركت
+        elif quote['post_price']:
+            post_color = "#00c853" if quote['post_change'] >= 0 else "#ff3d00"
+            post_sign = "+" if quote['post_change'] >= 0 else ""
+            pre_html = f"""
+            <p class="pre-price">{quote['post_price']:.2f} <span class="main-price-currency">USD</span></p>
+            <p class="pre-change" style="color: {post_color};">{post_sign}{quote['post_change']:.2f} ({post_sign}{quote['post_change_pct']:.2f}%)</p>
+            <p style="font-size: 12px; color: #ff9800; margin-top: 2px;">🌙 After-hours</p>
+            """
 
         display_name_header = COMPANY_NAMES.get(selected_ticker, selected_ticker)
         
         st.markdown(f"""
         <div class="top-bar">
             <span class="ticker-name">{display_name_header} · {selected_ticker} · {selected_timeframe}</span>
-            <span class="ohlc-data">C {live_price:.2f}</span>
-            <span class="{'green-text' if change >= 0 else 'red-text'}" style="font-weight:bold;">{sign}{change:.2f} ({sign}{change_pct:.2f}%)</span>
         </div>
         """, unsafe_allow_html=True)
 
-        # الرسم البياني (بيتحدث بالفريم)
         df_plot = df.tail(100).copy()
         df_plot['SMA_20'] = df['Close'].rolling(window=20).mean().tail(100)
         df_plot['SMA_30'] = df['Close'].rolling(window=30).mean().tail(100)
@@ -406,20 +456,26 @@ if selected_ticker:
         
         st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
 
-        # التحليل بناءً على الفريم والسعر الثابت
         score, is_above_mas, is_below_mas, recommendation, intraday_t, swing_t, stock_sl, breakdown = analyze_stock(df, selected_ticker, live_price)
         
         if score >= 60: score_color = "#00c853"
         elif score <= 40: score_color = "#ff3d00"
         else: score_color = "#ff9800"
 
+        # 🌟 عرض السعر بنفس شكل الصورة
         st.markdown(f"""
         <div class="side-card live-card" style="border-left-color: {score_color};">
         <div class="card-title">🧠 محرك التحليل ({selected_timeframe})</div>
-        <div class="score-badge" style="background-color: {score_color}20; color: {score_color}; border: 1px solid {score_color};">
-            درجة الثقة: {score}%
+        
+        <div style="background: {score_color}20; border: 1px solid {score_color}; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 10px;">
+            <div style="font-size: 24px; font-weight: bold; color: {score_color};">درجة الثقة: {score}%</div>
+            <div style="font-size: 16px; font-weight: bold; color: {score_color}; margin-top: 5px;">{recommendation}</div>
         </div>
-        <div style="text-align: center; font-weight: bold; font-size: 16px; color: {score_color}; margin-bottom: 5px;">{recommendation}</div>
+        
+        <p class="main-price">{live_price:.2f} <span class="main-price-currency">USD</span></p>
+        <p class="main-change" style="color: {main_color};">{main_sign}{live_change:.2f} ({main_sign}{live_change_pct:.2f}%)</p>
+        
+        {pre_html}
         
         <div class="points-details">
             <b>تفصيل النقاط:</b><br>
@@ -427,9 +483,6 @@ if selected_ticker:
         </div>
         
         <div style="border-top: 1px solid #2a2e39; margin: 10px 0;"></div>
-        <p class="price-text" style="color: {color};">${live_price:.2f}</p>
-        {ext_html}
-        <p class="change-text" style="color: {color}; margin-top: 5px;">{sign}{change:.2f} ({sign}{change_pct:.2f}%)</p>
         
         <div style="background: {score_color}15; padding: 10px; border-radius: 5px; margin-top: 10px;">
             <div class="rec-item"><span class="rec-label">هدف الجلسة:</span> <span style="color:{score_color}; font-weight:bold;">${intraday_t:.2f}</span></div>
