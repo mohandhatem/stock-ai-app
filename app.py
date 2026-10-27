@@ -52,7 +52,7 @@ div[data-baseweb="select"] input {
 .score-badge { font-size: 24px; font-weight: bold; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 10px;}
 .points-details { font-size: 11px; color: #9ca3af; text-align: right; margin-top: 5px; line-height: 1.6; border-top: 1px dashed #2a2e39; padding-top: 8px; }
 
-/* 🌟 شيلنا الـ sticky عشان السكرول يشتغل عادي */
+/* شيلنا التثبيت عشان السكرول */
 .stPlotlyChart { background-color: #000000; padding-bottom: 5px;}
 
 </style>
@@ -123,14 +123,17 @@ def fetch_data(ticker, interval, period):
         return df
     except: return pd.DataFrame()
 
+# 🌟 تعديل جلب البري ماركت عشان نتأكد إنه سعر حقيقي مش سعر إغلاق
 @st.cache_data(ttl=60)
-def fetch_extended_hours(ticker):
+def fetch_extended_hours(ticker, current_price):
     try:
         info = yf.Ticker(ticker).info
         pre = info.get('preMarketPrice')
         post = info.get('postMarketPrice')
-        if pre: return pre, "PRE"
-        if post: return post, "POST"
+        
+        # لو السعر متساوي مع سعر الإغلاق، يبقى مفيش بري ماركت حقيقي
+        if pre and abs(pre - current_price) > 0.01: return pre, "PRE"
+        if post and abs(post - current_price) > 0.01: return post, "POST"
         return None, None
     except: return None, None
 
@@ -354,7 +357,7 @@ if selected_ticker:
         color = "#00c853" if change >= 0 else "#ff3d00"
         sign = "+" if change >= 0 else ""
 
-        pre_price, pre_type = fetch_extended_hours(selected_ticker)
+        pre_price, pre_type = fetch_extended_hours(selected_ticker, current_price)
         pre_html = f'<p class="pre-market-text">{pre_type}: ${pre_price:.2f}</p>' if pre_price else ""
 
         display_name_header = COMPANY_NAMES.get(selected_ticker, selected_ticker)
@@ -382,15 +385,19 @@ if selected_ticker:
         colors = ['#00c853' if close >= open else '#ff3d00' for open, close in zip(df_plot['Open'], df_plot['Close'])]
         fig.add_trace(go.Bar(x=df_plot.index, y=df_plot['Volume'], name="Volume", marker_color=colors), row=2, col=1)
         
+        # 🌟 dragmode=False عشان نمنع سحب الشارت ونخلي الصفحة تسكرول
         fig.update_layout(
             template="plotly_dark", paper_bgcolor='#000000', plot_bgcolor='#000000', 
             height=350, autosize=True, margin=dict(l=0, r=0, t=10, b=0), 
-            showlegend=False, dragmode="pan", hovermode="x unified", 
+            showlegend=False, 
+            dragmode=False, # ✨ التعديل هنا
+            hovermode="x unified", 
             xaxis=dict(showgrid=True, gridcolor='#2a2e39', fixedrange=False),
             yaxis=dict(showgrid=True, gridcolor='#2a2e39', side='right', fixedrange=False)
         )
         fig.update_yaxes(showgrid=False, side='right', row=2, col=1, fixedrange=False)
         
+        # ✨ scrollZoom=True عشان تقدر تكبر بإيديك
         st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
 
     # --- 3. التحليلات والتوصيات تحت خالص ---
