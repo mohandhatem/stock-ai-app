@@ -22,10 +22,16 @@ footer {visibility: hidden;}
 .stApp { background-color: #000000; color: #ffffff; }
 .block-container { padding-top: 0.5rem; padding-bottom: 2rem; max-width: 100%; }
 
-div[data-baseweb="select"] input { pointer-events: none !important; user-select: none !important; caret-color: transparent !important; }
+div[data-baseweb="select"] input {
+    pointer-events: none !important;
+    user-select: none !important;
+    caret-color: transparent !important;
+}
 
 .top-bar { display: flex; align-items: center; justify-content: space-between; padding: 5px 10px; font-family: sans-serif; margin-bottom: 5px;}
 .ticker-name { font-size: 22px; font-weight: bold; color: #fff; }
+.green-text { color: #00c853; }
+.red-text { color: #ff3d00; }
 
 .side-card { background-color: #131722; border: 1px solid #2a2e39; border-radius: 8px; padding: 15px; margin-bottom: 15px;}
 .live-card { border-left: 4px solid #00c853; }
@@ -33,7 +39,7 @@ div[data-baseweb="select"] input { pointer-events: none !important; user-select:
 .general-card { border-left: 4px solid #ff9800; }
 .card-title { color: #d1d4dc; font-size: 15px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #2a2e39; padding-bottom: 5px;}
 
-/* تنسيق الأسعار */
+/* تنسيق الأسعار زي TradingView */
 .tv-price-box { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin-bottom: 15px; }
 .tv-live-price { font-size: 38px; font-weight: bold; color: #fff; margin: 0; line-height: 1; letter-spacing: -0.5px;}
 .tv-currency { font-size: 18px; color: #b2b5be; font-weight: normal;}
@@ -45,16 +51,17 @@ div[data-baseweb="select"] input { pointer-events: none !important; user-select:
 .rec-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;}
 .rec-label { color: #888; }
 .news-item { font-size: 12px; margin-bottom: 8px; color: #d1d4dc; line-height: 1.4;}
+.score-badge { font-size: 24px; font-weight: bold; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 10px;}
 .points-details { font-size: 11px; color: #9ca3af; text-align: right; margin-top: 5px; line-height: 1.6; border-top: 1px dashed #2a2e39; padding-top: 8px; }
+
 .stPlotlyChart { background-color: #000000; padding-bottom: 5px;}
 </style>
 """, unsafe_allow_html=True)
 
-# 🌟 تحديث الصفحة كل 60 ثانية (عشان الشارت والتحليل)
 st_autorefresh(interval=60000, limit=None, key="live_refresh")
 
 # ==========================================
-# 2. البيانات والقوائم (نفس الكود السابق)
+# 2. البيانات والقوائم
 # ==========================================
 US_TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX", "AMD", "INTC", "JPM", "V", "WMT", "DIS", "ORCL", "CRM", "ADBE", "AVGO", "QCOM", "BAC", "GS", "MA", "PYPL", "COST", "NKE", "SBUX", "MCD", "JNJ", "UNH", "PFE", "LLY", "XOM", "CVX", "BA", "PLTR", "IBM", "GE", "CAT", "MMM", "HON", "UPS", "FDX", "T", "VZ", "TMUS", "CMCSA", "CSCO", "TXN", "AMAT", "MU", "LRCX", "SBRC", "SHOP", "SQ", "ROKU", "ZM", "DOCU", "SNOW", "U", "RBLX", "COIN", "HOOD", "SOFI", "AI", "PATH", "NET", "DDOG", "CRWD", "OKTA", "PANW"]
 INDICES = {"S&P 500": "^GSPC", "NASDAQ": "^IXIC", "Dow Jones": "^DJI", "Russell 2000": "^RUT", "VIX (التقلب)": "^VIX", "TASI (تاسي)": "^TASI.SR"}
@@ -69,7 +76,7 @@ MARKETS = {"🇺🇸 أمريكي (US)": US_TICKERS, "📊 المؤشرات (Ind
 TIMEFRAMES = {"1m": {"interval": "1m", "period": "7d"}, "5m": {"interval": "5m", "period": "60d"}, "15m": {"interval": "15m", "period": "60d"}, "30m": {"interval": "30m", "period": "60d"}, "1h": {"interval": "60m", "period": "730d"}, "1d": {"interval": "1d", "period": "5y"}}
 
 # ==========================================
-# 3. دوال جلب البيانات (نفس الكود)
+# 3. دوال جلب البيانات
 # ==========================================
 @st.cache_data(ttl=60)
 def fetch_data(ticker, interval, period):
@@ -81,7 +88,7 @@ def fetch_data(ticker, interval, period):
         return df
     except: return pd.DataFrame()
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=5) # تقليل الكاش لـ 5 ثواني عشان السعر يتحدث بسرعة
 def get_live_quote(ticker):
     try:
         t = yf.Ticker(ticker)
@@ -92,9 +99,11 @@ def get_live_quote(ticker):
         if not live_price:
             df_reg = t.history(period="1d", interval="1m", prepost=False)
             if not df_reg.empty: live_price = df_reg['Close'].iloc[-1]
+            
         if not prev_close:
             df_daily = t.history(period="5d", interval="1d")
             if len(df_daily) > 1: prev_close = df_daily['Close'].iloc[-2]
+
         if not live_price: return None
         if not prev_close: prev_close = live_price
 
@@ -130,7 +139,6 @@ def fetch_news(ticker):
     except: return []
 
 def analyze_stock(df, ticker, live_price):
-    # ... (نفس كود التحليل السابق) ...
     if df.empty or len(df) < 50 or not live_price: return 50, False, False, "بيانات غير كافية", 0, 0, 0, "لا توجد بيانات"
     close, high, low, volume = df['Close'], df['High'], df['Low'], df['Volume']
     atr = (high - low).rolling(14).mean().iloc[-1]
@@ -170,7 +178,6 @@ def analyze_stock(df, ticker, live_price):
 
 @st.cache_data(ttl=600)
 def evaluate_tickers(tickers, interval, period):
-    # ... (نفس الكود) ...
     results = {}
     for t in tickers:
         try:
@@ -185,7 +192,6 @@ def evaluate_tickers(tickers, interval, period):
 
 @st.cache_data(ttl=300)
 def get_options_recommendation(ticker, current_price, general_rec):
-    # ... (نفس الكود) ...
     try:
         stock = yf.Ticker(ticker); expirations = stock.options
         if not expirations: return None
@@ -196,13 +202,15 @@ def get_options_recommendation(ticker, current_price, general_rec):
         option_type = "Call (ATM)" if "شراء" in general_rec else "Put (ATM)"
         last_price = chosen['lastPrice']
         if last_price == 0: return None
-        return {"type": option_type, "expiration": target_exp, "strike": chosen['strike'], "last_price": last_price, "session_target": last_price * 1.30, "expiry_target": last_price * 2.00, "stop_loss": last_price * 0.80}
+        return {
+            "type": option_type, "expiration": target_exp, "strike": chosen['strike'], "last_price": last_price,
+            "session_target": last_price * 1.30, "expiry_target": last_price * 2.00, "stop_loss": last_price * 0.80
+        }
     except: return None
 
 # ==========================================
 # 🌟 4. الجزء الخاص بتحديث السعر كل ثانية (Fragment)
 # ==========================================
-# @st.fragment(run_every="1s") بتخلي الجزء ده بس هو اللي يتحدث كل ثانية
 @st.fragment(run_every="1s")
 def render_price_box(ticker):
     quote = get_live_quote(ticker)
@@ -231,7 +239,6 @@ def render_price_box(ticker):
 {pre_html}
 </div>
 """, unsafe_allow_html=True)
-
 
 # ==========================================
 # 5. واجهة المستخدم الرئيسية
@@ -277,7 +284,7 @@ if selected_ticker:
     quote = get_live_quote(selected_ticker)
 
     if not df.empty and quote:
-        # 🌟 الشارت والتحليل (بيتحسبوا هنا مرة واحدة)
+        # 🌟 الشارت والتحليل
         df_plot = df.tail(100).copy()
         df_plot['SMA_20'] = df['Close'].rolling(window=20).mean().tail(100)
         df_plot['SMA_30'] = df['Close'].rolling(window=30).mean().tail(100)
@@ -322,5 +329,27 @@ if selected_ticker:
 </div>
 """, unsafe_allow_html=True)
 
-        # (باقي أكواد الخيارات والأخبار زي ما هي، مش محتاجة تتحدث كل ثانية)
-        # ...
+        # 🌟 كارت العقود
+        if selected_ticker.isalpha():
+            options_rec = get_options_recommendation(selected_ticker, quote['live_price'], recommendation)
+            if options_rec:
+                st.markdown(f"""
+<div class="side-card options-card">
+<div class="card-title">📄 توصية عقود الخيارات (Options)</div>
+<div class="rec-item"><span class="rec-label">النوع:</span> <span style="color:#00bcd4; font-weight:bold;">{options_rec['type']}</span></div>
+<div class="rec-item"><span class="rec-label">تاريخ الانتهاء:</span> <span>{options_rec['expiration']}</span></div>
+<div class="rec-item"><span class="rec-label">Strike:</span> <span>${options_rec['strike']:.2f}</span></div>
+<div class="rec-item"><span class="rec-label">سعر العقد:</span> <span style="color:#fff; font-weight:bold;">${options_rec['last_price']:.2f}</span></div>
+<div style="border-top: 1px dashed #2a2e39; margin: 8px 0;"></div>
+<div class="rec-item"><span class="rec-label">هدف الجلسة (+30%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['session_target']:.2f}</span></div>
+<div class="rec-item"><span class="rec-label">هدف الانتهاء (+100%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['expiry_target']:.2f}</span></div>
+<div class="rec-item"><span class="rec-label">وقف الخسارة (-20%):</span> <span style="color:#ff3d00; font-weight:bold;">${options_rec['stop_loss']:.2f}</span></div>
+</div>
+""", unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">لا توجد بيانات عقود متاحة لهذا السهم حالياً من السيرفر (أو السوق مغلق).</div></div>', unsafe_allow_html=True)
+
+        # 🌟 كارت الأخبار
+        news = fetch_news(selected_ticker)
+        news_html = "".join([f"<div class='news-item'>• {n}</div>" for n in news]) if news else "<div class='news-item'>لا توجد أخبار حديثة.</div>"
+        st.markdown(f'<div class="side-card general-card"><div class="card-title">📰 أخبار السهم</div>{news_html}</div>', unsafe_allow_html=True)
