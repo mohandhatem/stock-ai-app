@@ -30,8 +30,6 @@ div[data-baseweb="select"] input {
 
 .top-bar { display: flex; align-items: center; justify-content: space-between; padding: 5px 10px; font-family: sans-serif; margin-bottom: 5px;}
 .ticker-name { font-size: 22px; font-weight: bold; color: #fff; }
-.green-text { color: #00c853; }
-.red-text { color: #ff3d00; }
 
 .side-card { background-color: #131722; border: 1px solid #2a2e39; border-radius: 8px; padding: 15px; margin-bottom: 15px;}
 .live-card { border-left: 4px solid #00c853; }
@@ -39,7 +37,6 @@ div[data-baseweb="select"] input {
 .general-card { border-left: 4px solid #ff9800; }
 .card-title { color: #d1d4dc; font-size: 15px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #2a2e39; padding-bottom: 5px;}
 
-/* تنسيق الأسعار زي TradingView */
 .tv-price-box { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin-bottom: 15px; }
 .tv-live-price { font-size: 38px; font-weight: bold; color: #fff; margin: 0; line-height: 1; letter-spacing: -0.5px;}
 .tv-currency { font-size: 18px; color: #b2b5be; font-weight: normal;}
@@ -51,16 +48,20 @@ div[data-baseweb="select"] input {
 .rec-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;}
 .rec-label { color: #888; }
 .news-item { font-size: 12px; margin-bottom: 8px; color: #d1d4dc; line-height: 1.4;}
-.score-badge { font-size: 24px; font-weight: bold; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 10px;}
-.points-details { font-size: 11px; color: #9ca3af; text-align: right; margin-top: 5px; line-height: 1.6; border-top: 1px dashed #2a2e39; padding-top: 8px; }
 
-/* 🌟 تصميم شبكة البيانات اليونانية */
+/* تصميم شبكة البيانات اليونانية */
 .greeks-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 15px; border-top: 1px dashed #2a2e39; padding-top: 15px;}
 .greeks-item { display: flex; justify-content: space-between; font-size: 12px; background: #1e222d; padding: 6px 10px; border-radius: 4px;}
 .greeks-label { color: #888; }
 .greeks-value { color: #00bcd4; font-weight: bold;}
 
-.stPlotlyChart { background-color: #000000; padding-bottom: 5px;}
+/* تنسيق التبويبات */
+.stTabs [data-baseweb="tab-list"] { gap: 10px; }
+.stTabs [data-baseweb="tab"] { background-color: #131722; border-radius: 5px 5px 0 0; padding: 10px 20px; color: #d1d4dc;}
+.stTabs [aria-selected="true"] { background-color: #1e222d; color: #00c853; border-bottom: 2px solid #00c853;}
+
+/* تنسيق الجداول */
+[data-testid="stDataFrame"] { background-color: #131722; color: white; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -101,15 +102,12 @@ def get_live_quote(ticker):
         fi = t.fast_info
         live_price = fi.last_price
         prev_close = fi.previous_close
-        
         if not live_price:
             df_reg = t.history(period="1d", interval="1m", prepost=False)
             if not df_reg.empty: live_price = df_reg['Close'].iloc[-1]
-            
         if not prev_close:
             df_daily = t.history(period="5d", interval="1d")
             if len(df_daily) > 1: prev_close = df_daily['Close'].iloc[-2]
-
         if not live_price: return None
         if not prev_close: prev_close = live_price
 
@@ -118,7 +116,6 @@ def get_live_quote(ticker):
 
         info = t.info
         pre_price = info.get('preMarketPrice')
-        
         if not pre_price:
             try:
                 df_m = t.history(period="1d", interval="1m", prepost=True)
@@ -196,7 +193,6 @@ def evaluate_tickers(tickers, interval, period):
         except: pass
     return results
 
-# 🌟 دالة الخيارات المحدثة لجلب اليونانية
 @st.cache_data(ttl=300)
 def get_options_recommendation(ticker, current_price, general_rec):
     try:
@@ -205,31 +201,19 @@ def get_options_recommendation(ticker, current_price, general_rec):
         target_exp = expirations[0]; chain = stock.option_chain(target_exp)
         calls, puts = chain.calls, chain.puts
         if calls.empty or puts.empty: return None
-        
         chosen = calls.loc[abs(calls['strike'] - current_price).idxmin()] if "شراء" in general_rec else puts.loc[abs(puts['strike'] - current_price).idxmin()]
         option_type = "Call (ATM)" if "شراء" in general_rec else "Put (ATM)"
-        last_price = chosen['lastPrice']
-        strike = chosen['strike']
-        
+        last_price = chosen['lastPrice']; strike = chosen['strike']
         if last_price == 0: return None
 
-        # استخراج البيانات اليونانية
         iv = chosen.get('impliedVolatility', 0) * 100
-        delta = chosen.get('delta', 0)
-        gamma = chosen.get('gamma', 0)
-        theta = chosen.get('theta', 0)
-        vega = chosen.get('vega', 0)
-        rho = chosen.get('rho', 0)
-        
-        volume = chosen.get('volume', 0)
-        oi = chosen.get('openInterest', 0)
+        delta = chosen.get('delta', 0); gamma = chosen.get('gamma', 0)
+        theta = chosen.get('theta', 0); vega = chosen.get('vega', 0); rho = chosen.get('rho', 0)
+        volume = chosen.get('volume', 0); oi = chosen.get('openInterest', 0)
 
-        # حساب القيمة الجوهرية والخارجية
         intrinsic = 0
-        if "Call" in option_type and current_price > strike:
-            intrinsic = current_price - strike
-        elif "Put" in option_type and current_price < strike:
-            intrinsic = strike - current_price
+        if "Call" in option_type and current_price > strike: intrinsic = current_price - strike
+        elif "Put" in option_type and current_price < strike: intrinsic = strike - current_price
         extrinsic = last_price - intrinsic if last_price > intrinsic else 0
 
         return {
@@ -316,28 +300,32 @@ if selected_ticker:
     quote = get_live_quote(selected_ticker)
 
     if not df.empty and quote:
-        # 🌟 الشارت والتحليل
-        df_plot = df.tail(100).copy()
-        df_plot['SMA_20'] = df['Close'].rolling(window=20).mean().tail(100)
-        df_plot['SMA_30'] = df['Close'].rolling(window=30).mean().tail(100)
-        df_plot['SMA_50'] = df['Close'].rolling(window=50).mean().tail(100)
-
-        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.8, 0.2])
-        fig.add_trace(go.Candlestick(x=df_plot.index, open=df_plot['Open'], high=df_plot['High'], low=df_plot['Low'], close=df_plot['Close'], name="Price", increasing_line_color='#00c853', decreasing_line_color='#ff3d00'), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_20'], mode='lines', name='SMA 20', line=dict(color='#ff9800', width=1.2)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_30'], mode='lines', name='SMA 30', line=dict(color='#2196f3', width=1.2)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_50'], mode='lines', name='SMA 50', line=dict(color='#9c27b0', width=1.2)), row=1, col=1)
-        colors = ['#00c853' if close >= open else '#ff3d00' for open, close in zip(df_plot['Open'], df_plot['Close'])]
-        fig.add_trace(go.Bar(x=df_plot.index, y=df_plot['Volume'], name="Volume", marker_color=colors), row=2, col=1)
-        fig.update_layout(template="plotly_dark", paper_bgcolor='#000000', plot_bgcolor='#000000', height=350, autosize=True, margin=dict(l=0, r=0, t=10, b=0), showlegend=False, dragmode=False, hovermode="x unified", xaxis=dict(showgrid=True, gridcolor='#2a2e39', fixedrange=False), yaxis=dict(showgrid=True, gridcolor='#2a2e39', side='right', fixedrange=False))
-        fig.update_yaxes(showgrid=False, side='right', row=2, col=1, fixedrange=False)
-        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
-
         score, is_above_mas, is_below_mas, recommendation, intraday_t, swing_t, stock_sl, breakdown = analyze_stock(df, selected_ticker, quote['live_price'])
         score_color = "#00c853" if score >= 60 else ("#ff3d00" if score <= 40 else "#ff9800")
 
-        # 🌟 كارت التحليل
-        st.markdown(f"""
+        # 🌟 تقسيم الشاشة لتبويبات
+        tab1, tab2 = st.tabs(["📊 التحليل الفني والتوصيات", "⛓️ سلسلة الخيارات (Options Chain)"])
+
+        with tab1:
+            # الشارت
+            df_plot = df.tail(100).copy()
+            df_plot['SMA_20'] = df['Close'].rolling(window=20).mean().tail(100)
+            df_plot['SMA_30'] = df['Close'].rolling(window=30).mean().tail(100)
+            df_plot['SMA_50'] = df['Close'].rolling(window=50).mean().tail(100)
+
+            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.8, 0.2])
+            fig.add_trace(go.Candlestick(x=df_plot.index, open=df_plot['Open'], high=df_plot['High'], low=df_plot['Low'], close=df_plot['Close'], name="Price", increasing_line_color='#00c853', decreasing_line_color='#ff3d00'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_20'], mode='lines', name='SMA 20', line=dict(color='#ff9800', width=1.2)), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_30'], mode='lines', name='SMA 30', line=dict(color='#2196f3', width=1.2)), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_50'], mode='lines', name='SMA 50', line=dict(color='#9c27b0', width=1.2)), row=1, col=1)
+            colors = ['#00c853' if close >= open else '#ff3d00' for open, close in zip(df_plot['Open'], df_plot['Close'])]
+            fig.add_trace(go.Bar(x=df_plot.index, y=df_plot['Volume'], name="Volume", marker_color=colors), row=2, col=1)
+            fig.update_layout(template="plotly_dark", paper_bgcolor='#000000', plot_bgcolor='#000000', height=350, autosize=True, margin=dict(l=0, r=0, t=10, b=0), showlegend=False, dragmode=False, hovermode="x unified", xaxis=dict(showgrid=True, gridcolor='#2a2e39', fixedrange=False), yaxis=dict(showgrid=True, gridcolor='#2a2e39', side='right', fixedrange=False))
+            fig.update_yaxes(showgrid=False, side='right', row=2, col=1, fixedrange=False)
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
+
+            # كارت التحليل
+            st.markdown(f"""
 <div class="side-card live-card" style="border-left-color: {score_color};">
 <div class="card-title">🧠 محرك التحليل ({selected_timeframe})</div>
 <div style="background: {score_color}20; border: 1px solid {score_color}; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 15px;">
@@ -346,9 +334,9 @@ if selected_ticker:
 </div>
 """, unsafe_allow_html=True)
 
-        render_price_box(selected_ticker)
+            render_price_box(selected_ticker)
 
-        st.markdown(f"""
+            st.markdown(f"""
 <div class="points-details"><b>تفصيل النقاط:</b><br>{breakdown}</div>
 <div style="border-top: 1px solid #2a2e39; margin: 10px 0;"></div>
 <div style="background: {score_color}15; padding: 10px; border-radius: 5px; margin-top: 10px;">
@@ -359,30 +347,27 @@ if selected_ticker:
 </div>
 """, unsafe_allow_html=True)
 
-        # 🌟 كارت العقود مع البيانات اليونانية
-        if selected_ticker.isalpha():
-            options_rec = get_options_recommendation(selected_ticker, quote['live_price'], recommendation)
-            if options_rec:
-                st.markdown(f"""
+            # كارت العقود (ملخص)
+            if selected_ticker.isalpha():
+                options_rec = get_options_recommendation(selected_ticker, quote['live_price'], recommendation)
+                if options_rec:
+                    st.markdown(f"""
 <div class="side-card options-card">
-<div class="card-title">📄 توصية عقود الخيارات (Options)</div>
+<div class="card-title">📄 توصية عقود الخيارات (ملخص)</div>
 <div class="rec-item"><span class="rec-label">النوع:</span> <span style="color:#00bcd4; font-weight:bold;">{options_rec['type']}</span></div>
 <div class="rec-item"><span class="rec-label">تاريخ الانتهاء:</span> <span>{options_rec['expiration']}</span></div>
 <div class="rec-item"><span class="rec-label">Strike:</span> <span>${options_rec['strike']:.2f}</span></div>
 <div class="rec-item"><span class="rec-label">سعر العقد:</span> <span style="color:#fff; font-weight:bold;">${options_rec['last_price']:.2f}</span></div>
-
 <div style="border-top: 1px dashed #2a2e39; margin: 8px 0;"></div>
 <div class="rec-item"><span class="rec-label">هدف الجلسة (+30%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['session_target']:.2f}</span></div>
 <div class="rec-item"><span class="rec-label">هدف الانتهاء (+100%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['expiry_target']:.2f}</span></div>
 <div class="rec-item"><span class="rec-label">وقف الخسارة (-20%):</span> <span style="color:#ff3d00; font-weight:bold;">${options_rec['stop_loss']:.2f}</span></div>
 
-<!-- 🌟 البيانات اليونانية -->
+<!-- البيانات اليونانية -->
 <div class="greeks-grid">
 <div class="greeks-item"><span class="greeks-label">الحجم:</span> <span class="greeks-value">{options_rec['volume']}</span></div>
-<div class="greeks-item"><span class="greeks-label">الفائدة المفتوحة:</span> <span class="greeks-value">{options_rec['oi']}</span></div>
-<div class="greeks-item"><span class="greeks-label">القيمة الجوهرية:</span> <span class="greeks-value">{options_rec['intrinsic']:.2f}</span></div>
-<div class="greeks-item"><span class="greeks-label">القيمة الخارجية:</span> <span class="greeks-value">{options_rec['extrinsic']:.2f}</span></div>
-<div class="greeks-item"><span class="greeks-label">IV (التقلب):</span> <span class="greeks-value">{options_rec['iv']:.2f}%</span></div>
+<div class="greeks-item"><span class="greeks-label">OI:</span> <span class="greeks-value">{options_rec['oi']}</span></div>
+<div class="greeks-item"><span class="greeks-label">IV:</span> <span class="greeks-value">{options_rec['iv']:.2f}%</span></div>
 <div class="greeks-item"><span class="greeks-label">Delta:</span> <span class="greeks-value">{options_rec['delta']:.3f}</span></div>
 <div class="greeks-item"><span class="greeks-label">Gamma:</span> <span class="greeks-value">{options_rec['gamma']:.3f}</span></div>
 <div class="greeks-item"><span class="greeks-label">Theta:</span> <span class="greeks-value">{options_rec['theta']:.3f}</span></div>
@@ -391,10 +376,92 @@ if selected_ticker:
 </div>
 </div>
 """, unsafe_allow_html=True)
-            else:
-                st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">لا توجد بيانات عقود متاحة لهذا السهم حالياً من السيرفر.</div></div>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">لا توجد بيانات عقود متاحة لهذا السهم حالياً.</div></div>', unsafe_allow_html=True)
 
-        # 🌟 كارت الأخبار
-        news = fetch_news(selected_ticker)
-        news_html = "".join([f"<div class='news-item'>• {n}</div>" for n in news]) if news else "<div class='news-item'>لا توجد أخبار حديثة.</div>"
-        st.markdown(f'<div class="side-card general-card"><div class="card-title">📰 أخبار السهم</div>{news_html}</div>', unsafe_allow_html=True)
+            # الأخبار
+            news = fetch_news(selected_ticker)
+            news_html = "".join([f"<div class='news-item'>• {n}</div>" for n in news]) if news else "<div class='news-item'>لا توجد أخبار حديثة.</div>"
+            st.markdown(f'<div class="side-card general-card"><div class="card-title">📰 أخبار السهم</div>{news_html}</div>', unsafe_allow_html=True)
+
+        # 🌟 التاب التانية: سلسلة الخيارات كاملة
+        with tab2:
+            st.markdown(f"### ⛓️ سلسلة الخيارات لسهم **{COMPANY_NAMES.get(selected_ticker, selected_ticker)}**")
+            
+            if not selected_ticker.isalpha():
+                st.warning("سلسلة الخيارات متاحة للأسهم الأمريكية فقط.")
+            else:
+                try:
+                    stock = yf.Ticker(selected_ticker)
+                    expirations = stock.options
+                    
+                    if not expirations:
+                        st.warning("لا توجد خيارات متاحة لهذا السهم.")
+                    else:
+                        # اختيار تاريخ الانتهاء
+                        selected_exp = st.selectbox("اختر تاريخ الانتهاء (Expiration Date):", expirations)
+                        
+                        # حساب الأيام المتبقية
+                        exp_date = datetime.datetime.strptime(selected_exp, '%Y-%m-%d').date()
+                        today = datetime.date.today()
+                        dte = (exp_date - today).days
+                        
+                        st.markdown(f"**الأيام المتبقية للانتهاء (DTE):** <span style='color:#00c853; font-weight:bold;'>{dte} يوم</span>", unsafe_allow_html=True)
+                        
+                        # جلب البيانات
+                        chain = stock.option_chain(selected_exp)
+                        calls = chain.calls
+                        puts = chain.puts
+                        
+                        live_price = quote['live_price']
+                        
+                        # دالة مساعدة لتنسيق الجدول
+                        def format_option_df(df, is_call=True):
+                            if df.empty: return df
+                            
+                            # تحديد ITM / OTM
+                            if is_call:
+                                df['Moneyness'] = np.where(df['strike'] < live_price, 'ITM 🟢', 'OTM 🔴')
+                            else:
+                                df['Moneyness'] = np.where(df['strike'] > live_price, 'ITM 🟢', 'OTM 🔴')
+                            
+                            # الأعمدة المطلوبة
+                            cols = ['strike', 'lastPrice', 'bid', 'ask', 'volume', 'openInterest', 'impliedVolatility', 'Moneyness']
+                            if 'delta' in df.columns: cols.append('delta')
+                            if 'gamma' in df.columns: cols.append('gamma')
+                            if 'theta' in df.columns: cols.append('theta')
+                            if 'vega' in df.columns: cols.append('vega')
+                            
+                            res = df[cols].copy()
+                            
+                            # تنسيق الأرقام
+                            res['impliedVolatility'] = (res['impliedVolatility'] * 100).round(2).astype(str) + '%'
+                            if 'delta' in res.columns: res['delta'] = res['delta'].round(3)
+                            if 'gamma' in res.columns: res['gamma'] = res['gamma'].round(3)
+                            if 'theta' in res.columns: res['theta'] = res['theta'].round(3)
+                            if 'vega' in res.columns: res['vega'] = res['vega'].round(3)
+                            
+                            # ترتيب حسب سعر التنفيذ
+                            res = res.sort_values(by='strike')
+                            
+                            # تسمية الأعمدة
+                            res.rename(columns={
+                                'strike': 'Strike', 'lastPrice': 'Last Price', 'bid': 'Bid', 'ask': 'Ask',
+                                'volume': 'Volume', 'openInterest': 'Open Int.', 'impliedVolatility': 'IV',
+                                'Moneyness': 'Type', 'delta': 'Delta', 'gamma': 'Gamma', 'theta': 'Theta', 'vega': 'Vega'
+                            }, inplace=True)
+                            return res
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown("#### 🟢 عقود الشراء (Calls)")
+                            calls_df = format_option_df(calls, is_call=True)
+                            st.dataframe(calls_df, use_container_width=True, hide_index=True)
+                            
+                        with col2:
+                            st.markdown("#### 🔴 عقود البيع (Puts)")
+                            puts_df = format_option_df(puts, is_call=False)
+                            st.dataframe(puts_df, use_container_width=True, hide_index=True)
+
+                except Exception as e:
+                    st.error(f"حدث خطأ أثناء جلب سلسلة الخيارات: {e}")
