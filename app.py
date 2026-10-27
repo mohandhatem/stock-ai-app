@@ -7,6 +7,7 @@ import numpy as np
 from streamlit_autorefresh import st_autorefresh
 import datetime
 import time
+import pytz # 🌟 مكتبة التوقيت
 
 # ==========================================
 # 1. إعدادات الصفحة والتصميم
@@ -18,19 +19,11 @@ st.markdown("""
 #MainMenu {visibility: hidden;}
 header {visibility: hidden;}
 footer {visibility: hidden;}
-
 .stApp { background-color: #000000; color: #ffffff; }
 .block-container { padding-top: 0.5rem; padding-bottom: 2rem; max-width: 100%; }
-
-div[data-baseweb="select"] input {
-    pointer-events: none !important;
-    user-select: none !important;
-    caret-color: transparent !important;
-}
-
+div[data-baseweb="select"] input { pointer-events: none !important; user-select: none !important; caret-color: transparent !important; }
 .top-bar { display: flex; align-items: center; justify-content: space-between; padding: 5px 10px; font-family: sans-serif; margin-bottom: 5px;}
 .ticker-name { font-size: 22px; font-weight: bold; color: #fff; }
-
 .side-card { background-color: #131722; border: 1px solid #2a2e39; border-radius: 8px; padding: 15px; margin-bottom: 15px;}
 .live-card { border-left: 4px solid #00c853; }
 .options-card { border-left: 4px solid #00bcd4; }
@@ -48,37 +41,58 @@ div[data-baseweb="select"] input {
 .rec-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;}
 .rec-label { color: #888; }
 .news-item { font-size: 12px; margin-bottom: 8px; color: #d1d4dc; line-height: 1.4;}
+.points-details { font-size: 11px; color: #9ca3af; text-align: right; margin-top: 5px; line-height: 1.6; border-top: 1px dashed #2a2e39; padding-top: 8px; }
 
-/* تصميم شبكة البيانات اليونانية */
 .greeks-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 15px; border-top: 1px dashed #2a2e39; padding-top: 15px;}
 .greeks-item { display: flex; justify-content: space-between; font-size: 12px; background: #1e222d; padding: 6px 10px; border-radius: 4px;}
 .greeks-label { color: #888; }
-.greeks-value { color: #00bcd4; font-weight: bold;}
+.greeks-value { color: #00bcd4; font-weight: bold; }
 
-/* تنسيق التبويبات */
 .stTabs [data-baseweb="tab-list"] { gap: 10px; }
 .stTabs [data-baseweb="tab"] { background-color: #131722; border-radius: 5px 5px 0 0; padding: 10px 20px; color: #d1d4dc;}
-.stTabs [aria-selected="true"] { background-color: #1e222d; color: #00c853; border-bottom: 2px solid #00c853;}
-
-/* تنسيق الجداول */
+.stTabs [aria-selected="true"] { background-color: #1e222d; color: #00c853; border-bottom: 2px solid #00c853; }
 [data-testid="stDataFrame"] { background-color: #131722; color: white; }
+.stPlotlyChart { background-color: #000000; padding-bottom: 5px;}
 </style>
 """, unsafe_allow_html=True)
 
 st_autorefresh(interval=60000, limit=None, key="live_refresh")
 
 # ==========================================
+# 🌟 دالة تحديد حالة السوق (نيويورك)
+# ==========================================
+def get_market_session():
+    eastern = pytz.timezone('US/Eastern')
+    now = datetime.datetime.now(eastern)
+    
+    # لو ويكند (السبت والأحد) السوق مقفول
+    if now.weekday() >= 5:
+        return "CLOSED"
+    
+    current_time = now.time()
+    
+    # 9:30 AM to 4:00 PM = Regular
+    if datetime.time(9, 30) <= current_time < datetime.time(16, 0):
+        return "REGULAR"
+    # 4:00 AM to 9:30 AM = Pre-market
+    elif datetime.time(4, 0) <= current_time < datetime.time(9, 30):
+        return "PRE"
+    # 4:00 PM to 8:00 PM = After-hours
+    elif datetime.time(16, 0) <= current_time < datetime.time(20, 0):
+        return "POST"
+    else:
+        return "CLOSED"
+
+# ==========================================
 # 2. البيانات والقوائم
 # ==========================================
 US_TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX", "AMD", "INTC", "JPM", "V", "WMT", "DIS", "ORCL", "CRM", "ADBE", "AVGO", "QCOM", "BAC", "GS", "MA", "PYPL", "COST", "NKE", "SBUX", "MCD", "JNJ", "UNH", "PFE", "LLY", "XOM", "CVX", "BA", "PLTR", "IBM", "GE", "CAT", "MMM", "HON", "UPS", "FDX", "T", "VZ", "TMUS", "CMCSA", "CSCO", "TXN", "AMAT", "MU", "LRCX", "SBRC", "SHOP", "SQ", "ROKU", "ZM", "DOCU", "SNOW", "U", "RBLX", "COIN", "HOOD", "SOFI", "AI", "PATH", "NET", "DDOG", "CRWD", "OKTA", "PANW", "SMCI"]
 INDICES = {"S&P 500": "^GSPC", "NASDAQ": "^IXIC", "Dow Jones": "^DJI", "Russell 2000": "^RUT", "VIX (التقلب)": "^VIX", "TASI (تاسي)": "^TASI.SR"}
-
 COMPANY_NAMES = {
     "^GSPC": "S&P 500", "^IXIC": "NASDAQ", "^DJI": "Dow Jones", "^RUT": "Russell 2000", "^VIX": "VIX", "^TASI.SR": "TASI (تاسي)",
     "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet", "AMZN": "Amazon", "TSLA": "Tesla", 
     "NVDA": "NVIDIA", "META": "Meta", "NFLX": "Netflix", "AMD": "AMD", "INTC": "Intel", "JPM": "JPMorgan", "V": "Visa", "WMT": "Walmart", "DIS": "Disney", "ORCL": "Oracle", "CRM": "Salesforce", "ADBE": "Adobe", "AVGO": "Broadcom", "QCOM": "Qualcomm", "BAC": "Bank of America", "GS": "Goldman Sachs", "MA": "Mastercard", "PYPL": "PayPal", "COST": "Costco", "NKE": "Nike", "SBUX": "Starbucks", "MCD": "McDonald's", "JNJ": "Johnson & Johnson", "UNH": "UnitedHealth", "PFE": "Pfizer", "LLY": "Eli Lilly", "XOM": "Exxon Mobil", "CVX": "Chevron", "BA": "Boeing", "PLTR": "Palantir", "IBM": "IBM", "GE": "General Electric", "CAT": "Caterpillar", "MMM": "3M", "HON": "Honeywell", "UPS": "UPS", "FDX": "FedEx", "T": "AT&T", "VZ": "Verizon", "TMUS": "T-Mobile", "CMCSA": "Comcast", "CSCO": "Cisco", "TXN": "Texas Instruments", "AMAT": "Applied Materials", "MU": "Micron", "LRCX": "Lam Research", "SBRC": "Sound Equity", "SHOP": "Shopify", "SQ": "Block (Square)", "ROKU": "Roku", "ZM": "Zoom", "DOCU": "DocuSign", "SNOW": "Snowflake", "U": "Unity", "RBLX": "Roblox", "COIN": "Coinbase", "HOOD": "Robinhood", "SOFI": "SoFi", "AI": "C3.ai", "PATH": "UiPath", "NET": "Cloudflare", "DDOG": "Datadog", "CRWD": "CrowdStrike", "OKTA": "Okta", "PANW": "Palo Alto", "SMCI": "Super Micro Computer"
 }
-
 MARKETS = {"🇺🇸 أمريكي (US)": US_TICKERS, "📊 المؤشرات (Indices)": list(INDICES.keys())}
 TIMEFRAMES = {"1m": {"interval": "1m", "period": "7d"}, "5m": {"interval": "5m", "period": "60d"}, "15m": {"interval": "15m", "period": "60d"}, "30m": {"interval": "30m", "period": "60d"}, "1h": {"interval": "60m", "period": "730d"}, "1d": {"interval": "1d", "period": "5y"}}
 
@@ -102,35 +116,50 @@ def get_live_quote(ticker):
         fi = t.fast_info
         live_price = fi.last_price
         prev_close = fi.previous_close
+        
         if not live_price:
             df_reg = t.history(period="1d", interval="1m", prepost=False)
             if not df_reg.empty: live_price = df_reg['Close'].iloc[-1]
+            
         if not prev_close:
             df_daily = t.history(period="5d", interval="1d")
             if len(df_daily) > 1: prev_close = df_daily['Close'].iloc[-2]
+
         if not live_price: return None
         if not prev_close: prev_close = live_price
 
         live_change = live_price - prev_close
         live_change_pct = (live_change / prev_close) * 100
 
-        info = t.info
-        pre_price = info.get('preMarketPrice')
-        if not pre_price:
-            try:
-                df_m = t.history(period="1d", interval="1m", prepost=True)
-                if not df_m.empty:
-                    df_m.index = df_m.index.tz_convert('America/New_York')
-                    pre_df = df_m[df_m.index.time < datetime.time(9, 30)]
-                    if not pre_df.empty: pre_price = pre_df['Close'].iloc[-1]
-            except: pass
+        # 🌟 تحديد حالة السوق الحالية
+        session = get_market_session()
+        
+        pre_price = None
+        pre_change = None
+        pre_change_pct = None
 
-        pre_change = pre_price - prev_close if pre_price else None
-        pre_change_pct = (pre_change / prev_close) * 100 if pre_price else None
+        # بنجيب سعر البري ماركت بس لو إحنا في وقته أو السوق مقفول
+        if session in ["PRE", "CLOSED"]:
+            info = t.info
+            temp_pre = info.get('preMarketPrice')
+            if not temp_pre:
+                try:
+                    df_m = t.history(period="1d", interval="1m", prepost=True)
+                    if not df_m.empty:
+                        df_m.index = df_m.index.tz_convert('America/New_York')
+                        pre_df = df_m[df_m.index.time < datetime.time(9, 30)]
+                        if not pre_df.empty: temp_pre = pre_df['Close'].iloc[-1]
+                except: pass
+            
+            if temp_pre:
+                pre_price = temp_pre
+                pre_change = pre_price - prev_close
+                pre_change_pct = (pre_change / prev_close) * 100
 
         return {
             "live_price": live_price, "live_change": live_change, "live_change_pct": live_change_pct,
-            "pre_price": pre_price, "pre_change": pre_change, "pre_change_pct": pre_change_pct
+            "pre_price": pre_price, "pre_change": pre_change, "pre_change_pct": pre_change_pct,
+            "session": session
         }
     except: return None
 
@@ -234,12 +263,14 @@ def render_price_box(ticker):
         live_price = quote.get('live_price')
         live_change = quote.get('live_change', 0)
         live_change_pct = quote.get('live_change_pct', 0)
+        session = quote.get('session', 'CLOSED')
         
         main_color = "#00c853" if live_change >= 0 else "#ff3d00"
         main_sign = "+" if live_change >= 0 else ""
 
         pre_html = ""
-        if quote.get('pre_price'):
+        # 🌟 عرض البري ماركت فقط لو إحنا مش في الجلسة الرسمية
+        if quote.get('pre_price') and session != "REGULAR":
             pre_color = "#00c853" if quote.get('pre_change', 0) >= 0 else "#ff3d00"
             pre_sign = "+" if quote.get('pre_change', 0) >= 0 else ""
             pre_html = f"""
@@ -247,6 +278,9 @@ def render_price_box(ticker):
 <p class="tv-pre-price">{quote.get('pre_price'):.2f} <span class="tv-currency">USD</span></p>
 <p class="tv-pre-change" style="color: {pre_color};">{pre_sign}{quote.get('pre_change', 0):.2f} ({pre_sign}{quote.get('pre_change_pct', 0):.2f}%)</p>
 """
+        # لو إحنا في الجلسة الرسمية، اكتب حالة السوق
+        elif session == "REGULAR":
+             pre_html = f"""<p class="tv-pre-label" style="color:#00c853;">🟢 السوق مفتوح (Regular Session)</p>"""
 
         st.markdown(f"""
 <div class="tv-price-box">
@@ -303,11 +337,9 @@ if selected_ticker:
         score, is_above_mas, is_below_mas, recommendation, intraday_t, swing_t, stock_sl, breakdown = analyze_stock(df, selected_ticker, quote['live_price'])
         score_color = "#00c853" if score >= 60 else ("#ff3d00" if score <= 40 else "#ff9800")
 
-        # 🌟 تقسيم الشاشة لتبويبات
         tab1, tab2 = st.tabs(["📊 التحليل الفني والتوصيات", "⛓️ سلسلة الخيارات (Options Chain)"])
 
         with tab1:
-            # الشارت
             df_plot = df.tail(100).copy()
             df_plot['SMA_20'] = df['Close'].rolling(window=20).mean().tail(100)
             df_plot['SMA_30'] = df['Close'].rolling(window=30).mean().tail(100)
@@ -324,7 +356,6 @@ if selected_ticker:
             fig.update_yaxes(showgrid=False, side='right', row=2, col=1, fixedrange=False)
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
 
-            # كارت التحليل
             st.markdown(f"""
 <div class="side-card live-card" style="border-left-color: {score_color};">
 <div class="card-title">🧠 محرك التحليل ({selected_timeframe})</div>
@@ -347,7 +378,6 @@ if selected_ticker:
 </div>
 """, unsafe_allow_html=True)
 
-            # كارت العقود (ملخص)
             if selected_ticker.isalpha():
                 options_rec = get_options_recommendation(selected_ticker, quote['live_price'], recommendation)
                 if options_rec:
@@ -363,7 +393,6 @@ if selected_ticker:
 <div class="rec-item"><span class="rec-label">هدف الانتهاء (+100%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['expiry_target']:.2f}</span></div>
 <div class="rec-item"><span class="rec-label">وقف الخسارة (-20%):</span> <span style="color:#ff3d00; font-weight:bold;">${options_rec['stop_loss']:.2f}</span></div>
 
-<!-- البيانات اليونانية -->
 <div class="greeks-grid">
 <div class="greeks-item"><span class="greeks-label">الحجم:</span> <span class="greeks-value">{options_rec['volume']}</span></div>
 <div class="greeks-item"><span class="greeks-label">OI:</span> <span class="greeks-value">{options_rec['oi']}</span></div>
@@ -377,55 +406,38 @@ if selected_ticker:
 </div>
 """, unsafe_allow_html=True)
                 else:
-                    st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">لا توجد بيانات عقود متاحة لهذا السهم حالياً.</div></div>', unsafe_allow_html=True)
+                    st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">لا توجد بيانات عقود متاحة لهذا السهم حالياً (المشكلة من سيرفر ياهو فاينانس، جرب سهم آخر أو أعد المحاولة لاحقاً).</div></div>', unsafe_allow_html=True)
 
-            # الأخبار
             news = fetch_news(selected_ticker)
             news_html = "".join([f"<div class='news-item'>• {n}</div>" for n in news]) if news else "<div class='news-item'>لا توجد أخبار حديثة.</div>"
             st.markdown(f'<div class="side-card general-card"><div class="card-title">📰 أخبار السهم</div>{news_html}</div>', unsafe_allow_html=True)
 
-        # 🌟 التاب التانية: سلسلة الخيارات كاملة
         with tab2:
             st.markdown(f"### ⛓️ سلسلة الخيارات لسهم **{COMPANY_NAMES.get(selected_ticker, selected_ticker)}**")
-            
             if not selected_ticker.isalpha():
                 st.warning("سلسلة الخيارات متاحة للأسهم الأمريكية فقط.")
             else:
                 try:
                     stock = yf.Ticker(selected_ticker)
                     expirations = stock.options
-                    
                     if not expirations:
-                        st.warning("لا توجد خيارات متاحة لهذا السهم.")
+                        st.warning("لا توجد خيارات متاحة لهذا السهم (المشكلة من ياهو فاينانس).")
                     else:
-                        # اختيار تاريخ الانتهاء
                         selected_exp = st.selectbox("اختر تاريخ الانتهاء (Expiration Date):", expirations)
-                        
-                        # حساب الأيام المتبقية
                         exp_date = datetime.datetime.strptime(selected_exp, '%Y-%m-%d').date()
                         today = datetime.date.today()
                         dte = (exp_date - today).days
-                        
                         st.markdown(f"**الأيام المتبقية للانتهاء (DTE):** <span style='color:#00c853; font-weight:bold;'>{dte} يوم</span>", unsafe_allow_html=True)
                         
-                        # جلب البيانات
                         chain = stock.option_chain(selected_exp)
-                        calls = chain.calls
-                        puts = chain.puts
-                        
+                        calls = chain.calls; puts = chain.puts
                         live_price = quote['live_price']
                         
-                        # دالة مساعدة لتنسيق الجدول
                         def format_option_df(df, is_call=True):
                             if df.empty: return df
+                            if is_call: df['Moneyness'] = np.where(df['strike'] < live_price, 'ITM 🟢', 'OTM 🔴')
+                            else: df['Moneyness'] = np.where(df['strike'] > live_price, 'ITM 🟢', 'OTM 🔴')
                             
-                            # تحديد ITM / OTM
-                            if is_call:
-                                df['Moneyness'] = np.where(df['strike'] < live_price, 'ITM 🟢', 'OTM 🔴')
-                            else:
-                                df['Moneyness'] = np.where(df['strike'] > live_price, 'ITM 🟢', 'OTM 🔴')
-                            
-                            # الأعمدة المطلوبة
                             cols = ['strike', 'lastPrice', 'bid', 'ask', 'volume', 'openInterest', 'impliedVolatility', 'Moneyness']
                             if 'delta' in df.columns: cols.append('delta')
                             if 'gamma' in df.columns: cols.append('gamma')
@@ -433,18 +445,13 @@ if selected_ticker:
                             if 'vega' in df.columns: cols.append('vega')
                             
                             res = df[cols].copy()
-                            
-                            # تنسيق الأرقام
                             res['impliedVolatility'] = (res['impliedVolatility'] * 100).round(2).astype(str) + '%'
                             if 'delta' in res.columns: res['delta'] = res['delta'].round(3)
                             if 'gamma' in res.columns: res['gamma'] = res['gamma'].round(3)
                             if 'theta' in res.columns: res['theta'] = res['theta'].round(3)
                             if 'vega' in res.columns: res['vega'] = res['vega'].round(3)
-                            
-                            # ترتيب حسب سعر التنفيذ
                             res = res.sort_values(by='strike')
                             
-                            # تسمية الأعمدة
                             res.rename(columns={
                                 'strike': 'Strike', 'lastPrice': 'Last Price', 'bid': 'Bid', 'ask': 'Ask',
                                 'volume': 'Volume', 'openInterest': 'Open Int.', 'impliedVolatility': 'IV',
@@ -455,13 +462,9 @@ if selected_ticker:
                         col1, col2 = st.columns(2)
                         with col1:
                             st.markdown("#### 🟢 عقود الشراء (Calls)")
-                            calls_df = format_option_df(calls, is_call=True)
-                            st.dataframe(calls_df, use_container_width=True, hide_index=True)
-                            
+                            st.dataframe(format_option_df(calls, is_call=True), use_container_width=True, hide_index=True)
                         with col2:
                             st.markdown("#### 🔴 عقود البيع (Puts)")
-                            puts_df = format_option_df(puts, is_call=False)
-                            st.dataframe(puts_df, use_container_width=True, hide_index=True)
-
+                            st.dataframe(format_option_df(puts, is_call=False), use_container_width=True, hide_index=True)
                 except Exception as e:
                     st.error(f"حدث خطأ أثناء جلب سلسلة الخيارات: {e}")
