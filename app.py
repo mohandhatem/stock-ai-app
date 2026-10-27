@@ -23,8 +23,12 @@ footer {visibility: hidden;}
 .stApp { background-color: #000000; color: #ffffff; }
 .block-container { padding-top: 0.5rem; padding-bottom: 2rem; max-width: 100%; }
 
-/* إخفاء الكيبورد في القائمة المنسدلة */
-div[data-baseweb="select"] input { display: none !important; }
+/* 🌟 منع الكيبورد من الظهور في القوائم المنسدلة */
+div[data-baseweb="select"] input {
+    pointer-events: none !important;
+    user-select: none !important;
+    caret-color: transparent !important;
+}
 
 /* تنسيق الشريط العلوي */
 .top-bar { display: flex; align-items: center; justify-content: space-between; padding: 5px 10px; font-family: sans-serif; margin-bottom: 5px;}
@@ -48,8 +52,8 @@ div[data-baseweb="select"] input { display: none !important; }
 .score-badge { font-size: 24px; font-weight: bold; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 10px;}
 .points-details { font-size: 11px; color: #9ca3af; text-align: right; margin-top: 5px; line-height: 1.6; border-top: 1px dashed #2a2e39; padding-top: 8px; }
 
-/* ثبيت الشارت في مكانه */
-.stPlotlyChart { position: sticky; top: 0; z-index: 999; background-color: #000000; padding-bottom: 5px;}
+/* 🌟 شيلنا الـ sticky عشان السكرول يشتغل عادي */
+.stPlotlyChart { background-color: #000000; padding-bottom: 5px;}
 
 </style>
 """, unsafe_allow_html=True)
@@ -253,7 +257,6 @@ def evaluate_tickers(tickers, interval, period):
         except: pass
     return results
 
-# دالة جلب عقود الخيارات
 @st.cache_data(ttl=300)
 def get_options_recommendation(ticker, current_price, general_rec):
     try:
@@ -261,14 +264,12 @@ def get_options_recommendation(ticker, current_price, general_rec):
         expirations = stock.options
         if not expirations: return None
         
-        # نختار أقرب تاريخ انتهاء
         target_exp = expirations[0]
         chain = stock.option_chain(target_exp)
         calls, puts = chain.calls, chain.puts
         
         if calls.empty or puts.empty: return None
         
-        # نختار العقد الأقرب لسعر السهم الحالي
         chosen = calls.loc[abs(calls['strike'] - current_price).idxmin()] if "شراء" in general_rec else puts.loc[abs(puts['strike'] - current_price).idxmin()]
         option_type = "Call (ATM)" if "شراء" in general_rec else "Put (ATM)"
             
@@ -341,7 +342,7 @@ selected_ticker = st.selectbox("اختر السهم:", filtered_tickers, format_
 if custom_ticker:
     selected_ticker = custom_ticker
 
-# --- 2. الشارت في النص (ثابت) ---
+# --- 2. الشارت في النص ---
 if selected_ticker:
     df = fetch_data(selected_ticker, tf_config["interval"], tf_config["period"])
 
@@ -426,7 +427,6 @@ if selected_ticker:
         </div>
         """, unsafe_allow_html=True)
 
-        # 🌟 كارت عقود الخيارات (تم إصلاحه لضمان الظهور)
         if selected_ticker.isalpha():
             options_rec = get_options_recommendation(selected_ticker, current_price, recommendation)
             if options_rec:
@@ -451,7 +451,6 @@ if selected_ticker:
                 </div>
                 """, unsafe_allow_html=True)
 
-        # الأخبار
         news = fetch_news(selected_ticker)
         news_html = "".join([f"<div class='news-item'>• {n}</div>" for n in news]) if news else "<div class='news-item'>لا توجد أخبار حديثة.</div>"
         st.markdown(f"""
