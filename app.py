@@ -7,7 +7,7 @@ import numpy as np
 from streamlit_autorefresh import st_autorefresh
 import datetime
 import time
-import pytz # 🌟 مكتبة التوقيت
+import pytz
 
 # ==========================================
 # 1. إعدادات الصفحة والتصميم
@@ -58,30 +58,15 @@ div[data-baseweb="select"] input { pointer-events: none !important; user-select:
 
 st_autorefresh(interval=60000, limit=None, key="live_refresh")
 
-# ==========================================
-# 🌟 دالة تحديد حالة السوق (نيويورك)
-# ==========================================
 def get_market_session():
     eastern = pytz.timezone('US/Eastern')
     now = datetime.datetime.now(eastern)
-    
-    # لو ويكند (السبت والأحد) السوق مقفول
-    if now.weekday() >= 5:
-        return "CLOSED"
-    
+    if now.weekday() >= 5: return "CLOSED"
     current_time = now.time()
-    
-    # 9:30 AM to 4:00 PM = Regular
-    if datetime.time(9, 30) <= current_time < datetime.time(16, 0):
-        return "REGULAR"
-    # 4:00 AM to 9:30 AM = Pre-market
-    elif datetime.time(4, 0) <= current_time < datetime.time(9, 30):
-        return "PRE"
-    # 4:00 PM to 8:00 PM = After-hours
-    elif datetime.time(16, 0) <= current_time < datetime.time(20, 0):
-        return "POST"
-    else:
-        return "CLOSED"
+    if datetime.time(9, 30) <= current_time < datetime.time(16, 0): return "REGULAR"
+    elif datetime.time(4, 0) <= current_time < datetime.time(9, 30): return "PRE"
+    elif datetime.time(16, 0) <= current_time < datetime.time(20, 0): return "POST"
+    else: return "CLOSED"
 
 # ==========================================
 # 2. البيانات والقوائم
@@ -130,15 +115,9 @@ def get_live_quote(ticker):
 
         live_change = live_price - prev_close
         live_change_pct = (live_change / prev_close) * 100
-
-        # 🌟 تحديد حالة السوق الحالية
         session = get_market_session()
         
-        pre_price = None
-        pre_change = None
-        pre_change_pct = None
-
-        # بنجيب سعر البري ماركت بس لو إحنا في وقته أو السوق مقفول
+        pre_price = None; pre_change = None; pre_change_pct = None
         if session in ["PRE", "CLOSED"]:
             info = t.info
             temp_pre = info.get('preMarketPrice')
@@ -150,17 +129,12 @@ def get_live_quote(ticker):
                         pre_df = df_m[df_m.index.time < datetime.time(9, 30)]
                         if not pre_df.empty: temp_pre = pre_df['Close'].iloc[-1]
                 except: pass
-            
             if temp_pre:
                 pre_price = temp_pre
                 pre_change = pre_price - prev_close
                 pre_change_pct = (pre_change / prev_close) * 100
 
-        return {
-            "live_price": live_price, "live_change": live_change, "live_change_pct": live_change_pct,
-            "pre_price": pre_price, "pre_change": pre_change, "pre_change_pct": pre_change_pct,
-            "session": session
-        }
+        return {"live_price": live_price, "live_change": live_change, "live_change_pct": live_change_pct, "pre_price": pre_price, "pre_change": pre_change, "pre_change_pct": pre_change_pct, "session": session}
     except: return None
 
 @st.cache_data(ttl=300)
@@ -222,18 +196,34 @@ def evaluate_tickers(tickers, interval, period):
         except: pass
     return results
 
+# 🌟 دالة العقود مع إعادة المحاولة
 @st.cache_data(ttl=300)
 def get_options_recommendation(ticker, current_price, general_rec):
+    expirations = []
+    # بنحاول 3 مرات عشان نتغلب على مشكلة ياهو فاينانس
+    for attempt in range(3):
+        try:
+            stock = yf.Ticker(ticker)
+            expirations = stock.options
+            if expirations: break
+            time.sleep(1) # استنى ثانية وجرب تاني
+        except:
+            time.sleep(1)
+            
+    if not expirations: return "NO_DATA"
+
     try:
-        stock = yf.Ticker(ticker); expirations = stock.options
-        if not expirations: return None
-        target_exp = expirations[0]; chain = stock.option_chain(target_exp)
+        stock = yf.Ticker(ticker)
+        target_exp = expirations[0]
+        chain = stock.option_chain(target_exp)
         calls, puts = chain.calls, chain.puts
-        if calls.empty or puts.empty: return None
+        if calls.empty or puts.empty: return "NO_DATA"
+        
         chosen = calls.loc[abs(calls['strike'] - current_price).idxmin()] if "شراء" in general_rec else puts.loc[abs(puts['strike'] - current_price).idxmin()]
         option_type = "Call (ATM)" if "شراء" in general_rec else "Put (ATM)"
         last_price = chosen['lastPrice']; strike = chosen['strike']
-        if last_price == 0: return None
+        
+        if last_price == 0: return "NO_DATA"
 
         iv = chosen.get('impliedVolatility', 0) * 100
         delta = chosen.get('delta', 0); gamma = chosen.get('gamma', 0)
@@ -251,10 +241,11 @@ def get_options_recommendation(ticker, current_price, general_rec):
             "iv": iv, "delta": delta, "gamma": gamma, "theta": theta, "vega": vega, "rho": rho,
             "volume": volume, "oi": oi, "intrinsic": intrinsic, "extrinsic": extrinsic
         }
-    except: return None
+    except:
+        return "NO_DATA"
 
 # ==========================================
-# 4. الجزء الخاص بتحديث السعر كل ثانية
+# 4. تحديث السعر كل ثانية
 # ==========================================
 @st.fragment(run_every="1s")
 def render_price_box(ticker):
@@ -269,7 +260,6 @@ def render_price_box(ticker):
         main_sign = "+" if live_change >= 0 else ""
 
         pre_html = ""
-        # 🌟 عرض البري ماركت فقط لو إحنا مش في الجلسة الرسمية
         if quote.get('pre_price') and session != "REGULAR":
             pre_color = "#00c853" if quote.get('pre_change', 0) >= 0 else "#ff3d00"
             pre_sign = "+" if quote.get('pre_change', 0) >= 0 else ""
@@ -278,7 +268,6 @@ def render_price_box(ticker):
 <p class="tv-pre-price">{quote.get('pre_price'):.2f} <span class="tv-currency">USD</span></p>
 <p class="tv-pre-change" style="color: {pre_color};">{pre_sign}{quote.get('pre_change', 0):.2f} ({pre_sign}{quote.get('pre_change_pct', 0):.2f}%)</p>
 """
-        # لو إحنا في الجلسة الرسمية، اكتب حالة السوق
         elif session == "REGULAR":
              pre_html = f"""<p class="tv-pre-label" style="color:#00c853;">🟢 السوق مفتوح (Regular Session)</p>"""
 
@@ -291,7 +280,7 @@ def render_price_box(ticker):
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 5. واجهة المستخدم الرئيسية
+# 5. واجهة المستخدم
 # ==========================================
 c1, c2, c3 = st.columns([1.5, 1.5, 1])
 with c1: selected_market = st.selectbox("السوق", list(MARKETS.keys()), index=0, label_visibility="collapsed")
@@ -313,7 +302,7 @@ elif filter_mode == "سلبي (تحت المتوسطات) 🔻": filtered_ticker
 else: filtered_tickers = ticker_symbols
 
 if not filtered_tickers:
-    st.warning(f"لا توجد أسهم تتطابق مع الفلتر المختار ({filter_mode}) على فريم {selected_timeframe}. تم عرض كل الأسهم بدلاً من ذلك.")
+    st.warning(f"لا توجد أسهم تتطابق مع الفلتر المختار ({filter_mode}). تم عرض كل الأسهم بدلاً من ذلك.")
     filtered_tickers = ticker_symbols
 
 filtered_tickers = sorted(filtered_tickers, key=lambda x: eval_data.get(x, {}).get('score', 0), reverse=True)
@@ -378,9 +367,13 @@ if selected_ticker:
 </div>
 """, unsafe_allow_html=True)
 
+            # 🌟 عرض كارت العقود
             if selected_ticker.isalpha():
                 options_rec = get_options_recommendation(selected_ticker, quote['live_price'], recommendation)
-                if options_rec:
+                
+                if options_rec == "NO_DATA":
+                    st.markdown('<div class="side-card options-card"><div class="card-title">📄 توصية عقود الخيارات</div><div class="news-item">⚠️ سيرفر ياهو فاينانس مرفضش يجيب بيانات العقود دلوقتي. جرب تضغط Refresh أو اختار سهم تاني.</div></div>', unsafe_allow_html=True)
+                elif options_rec:
                     st.markdown(f"""
 <div class="side-card options-card">
 <div class="card-title">📄 توصية عقود الخيارات (ملخص)</div>
@@ -406,7 +399,7 @@ if selected_ticker:
 </div>
 """, unsafe_allow_html=True)
                 else:
-                    st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">لا توجد بيانات عقود متاحة لهذا السهم حالياً (المشكلة من سيرفر ياهو فاينانس، جرب سهم آخر أو أعد المحاولة لاحقاً).</div></div>', unsafe_allow_html=True)
+                    st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">لا توجد بيانات عقود متاحة لهذا السهم.</div></div>', unsafe_allow_html=True)
 
             news = fetch_news(selected_ticker)
             news_html = "".join([f"<div class='news-item'>• {n}</div>" for n in news]) if news else "<div class='news-item'>لا توجد أخبار حديثة.</div>"
@@ -419,9 +412,14 @@ if selected_ticker:
             else:
                 try:
                     stock = yf.Ticker(selected_ticker)
+                    # محاولة جلب التواريخ
                     expirations = stock.options
                     if not expirations:
-                        st.warning("لا توجد خيارات متاحة لهذا السهم (المشكلة من ياهو فاينانس).")
+                        time.sleep(1)
+                        expirations = stock.options
+                        
+                    if not expirations:
+                        st.warning("لا توجد خيارات متاحة لهذا السهم حالياً (المشكلة من ياهو فاينانس).")
                     else:
                         selected_exp = st.selectbox("اختر تاريخ الانتهاء (Expiration Date):", expirations)
                         exp_date = datetime.datetime.strptime(selected_exp, '%Y-%m-%d').date()
