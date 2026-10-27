@@ -39,6 +39,7 @@ div[data-baseweb="select"] input {
 .general-card { border-left: 4px solid #ff9800; }
 .card-title { color: #d1d4dc; font-size: 15px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #2a2e39; padding-bottom: 5px;}
 
+/* تنسيق الأسعار زي TradingView */
 .tv-price-box { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin-bottom: 15px; }
 .tv-live-price { font-size: 38px; font-weight: bold; color: #fff; margin: 0; line-height: 1; letter-spacing: -0.5px;}
 .tv-currency { font-size: 18px; color: #b2b5be; font-weight: normal;}
@@ -87,53 +88,49 @@ def fetch_data(ticker, interval, period):
         return df
     except: return pd.DataFrame()
 
-# 🌟 دالة محدثة لجلب السعر وبري ماركت وبوست ماركت
+# 🌟 الدالة السحرية: تفصل السعر الأساسي عن البري ماركت تماماً
 @st.cache_data(ttl=60)
 def get_live_quote(ticker):
     try:
         t = yf.Ticker(ticker)
-        
-        # بنجيب الداتا من info (بتحتوي على pre و post)
         info = t.info
-        
-        live_price = info.get('regularMarketPrice') or info.get('currentPrice')
-        prev_close = info.get('regularMarketPreviousClose')
-        
-        if not live_price:
-            hist = t.history(period="1d", interval="1m", prepost=True)
-            if not hist.empty:
-                live_price = hist['Close'].iloc[-1]
-        
-        if not live_price: return None
-        if not prev_close: prev_close = live_price
 
-        live_change = live_price - prev_close
-        live_change_pct = (live_change / prev_close) * 100 if prev_close else 0
+        # 1. جلب السعر الأساسي (بدون بري ماركت)
+        # بنجيب آخر شمعة دقيقة بس من التداول العادي (prepost=False)
+        df_reg = t.history(period="1d", interval="1m", prepost=False)
+        if not df_reg.empty:
+            reg_price = df_reg['Close'].iloc[-1]
+        else:
+            reg_price = info.get('regularMarketPrice') or info.get('currentPrice')
 
-        # البري ماركت
+        # 2. جلب سعر الإغلاق السابق
+        df_daily = t.history(period="5d", interval="1d")
+        if len(df_daily) > 1:
+            prev_close = df_daily['Close'].iloc[-2]
+        else:
+            prev_close = info.get('regularMarketPreviousClose') or reg_price
+
+        if not reg_price: return None
+        if not prev_close: prev_close = reg_price
+
+        reg_change = reg_price - prev_close
+        reg_change_pct = (reg_change / prev_close) * 100
+
+        # 3. جلب سعر البري ماركت (والبوست ماركت)
         pre_price = info.get('preMarketPrice')
         pre_change = info.get('preMarketChange')
         pre_change_pct = info.get('preMarketChangePercent')
-        
-        if pre_price:
-            if not pre_change: pre_change = pre_price - prev_close
-            if not pre_change_pct: pre_change_pct = (pre_change / prev_close) * 100
 
-        # البوست ماركت (عشان الكود ميكسرش)
         post_price = info.get('postMarketPrice')
         post_change = info.get('postMarketChange')
         post_change_pct = info.get('postMarketChangePercent')
-        
-        if post_price:
-            if not post_change: post_change = post_price - prev_close
-            if not post_change_pct: post_change_pct = (post_change / prev_close) * 100
 
         return {
-            "live_price": live_price, "live_change": live_change, "live_change_pct": live_change_pct,
+            "reg_price": reg_price, "reg_change": reg_change, "reg_change_pct": reg_change_pct,
             "pre_price": pre_price, "pre_change": pre_change, "pre_change_pct": pre_change_pct,
             "post_price": post_price, "post_change": post_change, "post_change_pct": post_change_pct
         }
-    except: 
+    except Exception as e:
         return None
 
 @st.cache_data(ttl=300)
@@ -202,7 +199,7 @@ def evaluate_tickers(tickers, interval, period):
             df = fetch_data(t, interval, period)
             quote = get_live_quote(t)
             if len(df) < 50 or not quote: continue
-            score, is_above_mas, is_below_mas, rec, _, _, _, _ = analyze_stock(df, t, quote['live_price'])
+            score, is_above_mas, is_below_mas, rec, _, _, _, _ = analyze_stock(df, t, quote['reg_price'])
             results[t] = {'score': score, 'is_above_mas': is_above_mas, 'is_below_mas': is_below_mas, 'rec': rec}
             time.sleep(0.2) 
         except: pass
@@ -270,13 +267,14 @@ if selected_ticker:
     quote = get_live_quote(selected_ticker)
 
     if not df.empty and quote:
-        live_price = quote.get('live_price')
-        live_change = quote.get('live_change', 0)
-        live_change_pct = quote.get('live_change_pct', 0)
+        # 🌟 بنستخدم السعر الأساسي (reg_price) مش البري ماركت
+        live_price = quote.get('reg_price')
+        live_change = quote.get('reg_change', 0)
+        live_change_pct = quote.get('reg_change_pct', 0)
         
         main_color = "#00c853" if live_change >= 0 else "#ff3d00"; main_sign = "+" if live_change >= 0 else ""
 
-        # 🌟 استخدام .get() عشان نمنع أي KeyError
+        # 🌟 البري ماركت بيظهر في مكانه المخصص
         pre_html = ""
         if quote.get('pre_price'):
             pre_color = "#00c853" if quote.get('pre_change', 0) >= 0 else "#ff3d00"; pre_sign = "+" if quote.get('pre_change', 0) >= 0 else ""
@@ -315,6 +313,7 @@ if selected_ticker:
         score, is_above_mas, is_below_mas, recommendation, intraday_t, swing_t, stock_sl, breakdown = analyze_stock(df, selected_ticker, live_price)
         score_color = "#00c853" if score >= 60 else ("#ff3d00" if score <= 40 else "#ff9800")
 
+        # 🌟 عرض السعر الأساسي وتحته البري ماركت
         st.markdown(f"""
         <div class="side-card live-card" style="border-left-color: {score_color};">
         <div class="card-title">🧠 محرك التحليل ({selected_timeframe})</div>
