@@ -9,7 +9,7 @@ import datetime
 import time
 
 # ==========================================
-# 1. إعدادات الصفحة والتصميم (أسود بالكامل زي Webull)
+# 1. إعدادات الصفحة والتصميم (أسود بالكامل)
 # ==========================================
 st.set_page_config(page_title="Pro Trading Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
@@ -253,6 +253,39 @@ def evaluate_tickers(tickers, interval, period):
         except: pass
     return results
 
+# دالة جلب عقود الخيارات
+@st.cache_data(ttl=300)
+def get_options_recommendation(ticker, current_price, general_rec):
+    try:
+        stock = yf.Ticker(ticker)
+        expirations = stock.options
+        if not expirations: return None
+        
+        # نختار أقرب تاريخ انتهاء
+        target_exp = expirations[0]
+        chain = stock.option_chain(target_exp)
+        calls, puts = chain.calls, chain.puts
+        
+        if calls.empty or puts.empty: return None
+        
+        # نختار العقد الأقرب لسعر السهم الحالي
+        chosen = calls.loc[abs(calls['strike'] - current_price).idxmin()] if "شراء" in general_rec else puts.loc[abs(puts['strike'] - current_price).idxmin()]
+        option_type = "Call (ATM)" if "شراء" in general_rec else "Put (ATM)"
+            
+        last_price = chosen['lastPrice']
+        
+        if last_price == 0: return None
+        
+        return {
+            "type": option_type, "expiration": target_exp, "strike": chosen['strike'],
+            "last_price": last_price, 
+            "session_target": last_price * 1.30, 
+            "expiry_target": last_price * 2.00,  
+            "stop_loss": last_price * 0.80
+        }
+    except: 
+        return None
+
 # ==========================================
 # 4. واجهة المستخدم (فوق وتحت)
 # ==========================================
@@ -297,9 +330,7 @@ def format_ticker(t):
     if data.get('is_above_mas'): prefix = "🚀"
     elif data.get('is_below_mas'): prefix = "🔻"
     else: prefix = "⚖️"
-    
     display_name = COMPANY_NAMES.get(t, t) 
-    
     if display_name == t:
         return f"{prefix} {t} - {data.get('score', 50)}%"
     else:
@@ -350,17 +381,10 @@ if selected_ticker:
         colors = ['#00c853' if close >= open else '#ff3d00' for open, close in zip(df_plot['Open'], df_plot['Close'])]
         fig.add_trace(go.Bar(x=df_plot.index, y=df_plot['Volume'], name="Volume", marker_color=colors), row=2, col=1)
         
-        # خلفية سوداء بالكامل زي التطبيق
         fig.update_layout(
-            template="plotly_dark", 
-            paper_bgcolor='#000000', 
-            plot_bgcolor='#000000', 
-            height=350, # طول مناسب للموبايل
-            autosize=True, 
-            margin=dict(l=0, r=0, t=10, b=0), 
-            showlegend=False, 
-            dragmode="pan", 
-            hovermode="x unified", 
+            template="plotly_dark", paper_bgcolor='#000000', plot_bgcolor='#000000', 
+            height=350, autosize=True, margin=dict(l=0, r=0, t=10, b=0), 
+            showlegend=False, dragmode="pan", hovermode="x unified", 
             xaxis=dict(showgrid=True, gridcolor='#2a2e39', fixedrange=False),
             yaxis=dict(showgrid=True, gridcolor='#2a2e39', side='right', fixedrange=False)
         )
@@ -402,32 +426,32 @@ if selected_ticker:
         </div>
         """, unsafe_allow_html=True)
 
+        # 🌟 كارت عقود الخيارات (تم إصلاحه لضمان الظهور)
         if selected_ticker.isalpha():
-            try:
-                stock = yf.Ticker(selected_ticker)
-                if stock.options:
-                    chain = stock.option_chain(stock.options[0])
-                    calls, puts = chain.calls, chain.puts
-                    if not calls.empty and not puts.empty:
-                        chosen = calls.loc[abs(calls['strike'] - current_price).idxmin()] if "شراء" in recommendation else puts.loc[abs(puts['strike'] - current_price).idxmin()]
-                        last_price = chosen['lastPrice']
-                        if last_price > 0:
-                            st.markdown(f"""
-                            <div class="side-card options-card">
-                            <div class="card-title">📄 عقود الخيارات</div>
-                            <div class="rec-item"><span class="rec-label">النوع:</span> <span style="color:#00bcd4; font-weight:bold;">{"Call" if "شراء" in recommendation else "Put"}</span></div>
-                            <div class="rec-item"><span class="rec-label">الانتهاء:</span> <span>{stock.options[0]}</span></div>
-                            <div class="rec-item"><span class="rec-label">Strike:</span> <span>${chosen['strike']:.2f}</span></div>
-                            <div class="rec-item"><span class="rec-label">سعر العقد:</span> <span style="color:#fff; font-weight:bold;">${last_price:.2f}</span></div>
-                            <div style="border-top: 1px dashed #2a2e39; margin: 8px 0;"></div>
-                            <div class="rec-item"><span class="rec-label">هدف الجلسة (+30%):</span> <span style="color:#00c853; font-weight:bold;">${last_price * 1.30:.2f}</span></div>
-                            <div class="rec-item"><span class="rec-label">هدف الانتهاء (+100%):</span> <span style="color:#00c853; font-weight:bold;">${last_price * 2.00:.2f}</span></div>
-                            <div class="rec-item"><span class="rec-label">وقف الخسارة (-20%):</span> <span style="color:#ff3d00; font-weight:bold;">${last_price * 0.80:.2f}</span></div>
-                            </div>
-                            """, unsafe_allow_html=True)
-            except:
-                pass
+            options_rec = get_options_recommendation(selected_ticker, current_price, recommendation)
+            if options_rec:
+                st.markdown(f"""
+                <div class="side-card options-card">
+                <div class="card-title">📄 توصية عقود الخيارات (Options)</div>
+                <div class="rec-item"><span class="rec-label">النوع:</span> <span style="color:#00bcd4; font-weight:bold;">{options_rec['type']}</span></div>
+                <div class="rec-item"><span class="rec-label">تاريخ الانتهاء:</span> <span>{options_rec['expiration']}</span></div>
+                <div class="rec-item"><span class="rec-label">Strike:</span> <span>${options_rec['strike']:.2f}</span></div>
+                <div class="rec-item"><span class="rec-label">سعر العقد:</span> <span style="color:#fff; font-weight:bold;">${options_rec['last_price']:.2f}</span></div>
+                <div style="border-top: 1px dashed #2a2e39; margin: 8px 0;"></div>
+                <div class="rec-item"><span class="rec-label">هدف الجلسة (+30%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['session_target']:.2f}</span></div>
+                <div class="rec-item"><span class="rec-label">هدف الانتهاء (+100%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['expiry_target']:.2f}</span></div>
+                <div class="rec-item"><span class="rec-label">وقف الخسارة (-20%):</span> <span style="color:#ff3d00; font-weight:bold;">${options_rec['stop_loss']:.2f}</span></div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div class="side-card options-card">
+                <div class="card-title">📄 عقود الخيارات</div>
+                <div class="news-item">لا توجد بيانات عقود متاحة لهذا السهم حالياً من السيرفر (أو السوق مغلق).</div>
+                </div>
+                """, unsafe_allow_html=True)
 
+        # الأخبار
         news = fetch_news(selected_ticker)
         news_html = "".join([f"<div class='news-item'>• {n}</div>" for n in news]) if news else "<div class='news-item'>لا توجد أخبار حديثة.</div>"
         st.markdown(f"""
