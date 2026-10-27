@@ -9,7 +9,7 @@ import datetime
 import time
 
 # ==========================================
-# 1. إعدادات الصفحة والتصميم (زي TradingView)
+# 1. إعدادات الصفحة والتصميم
 # ==========================================
 st.set_page_config(page_title="Pro Trading Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
@@ -39,7 +39,6 @@ div[data-baseweb="select"] input {
 .general-card { border-left: 4px solid #ff9800; }
 .card-title { color: #d1d4dc; font-size: 15px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #2a2e39; padding-bottom: 5px;}
 
-/* تنسيق الأسعار زي TradingView */
 .tv-price-box { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin-bottom: 15px; }
 .tv-live-price { font-size: 38px; font-weight: bold; color: #fff; margin: 0; line-height: 1; letter-spacing: -0.5px;}
 .tv-currency { font-size: 18px; color: #b2b5be; font-weight: normal;}
@@ -58,7 +57,7 @@ div[data-baseweb="select"] input {
 </style>
 """, unsafe_allow_html=True)
 
-st_autorefresh(interval=30000, limit=None, key="live_refresh") # تحديث أسرع
+st_autorefresh(interval=30000, limit=None, key="live_refresh")
 
 # ==========================================
 # 2. البيانات والقوائم
@@ -76,7 +75,7 @@ MARKETS = {"🇺🇸 أمريكي (US)": US_TICKERS, "📊 المؤشرات (Ind
 TIMEFRAMES = {"1m": {"interval": "1m", "period": "7d"}, "5m": {"interval": "5m", "period": "60d"}, "15m": {"interval": "15m", "period": "60d"}, "30m": {"interval": "30m", "period": "60d"}, "1h": {"interval": "60m", "period": "730d"}, "1d": {"interval": "1d", "period": "5y"}}
 
 # ==========================================
-# 3. دوال جلب البيانات (بدقة الـ Webull)
+# 3. دوال جلب البيانات
 # ==========================================
 @st.cache_data(ttl=60)
 def fetch_data(ticker, interval, period):
@@ -88,18 +87,15 @@ def fetch_data(ticker, interval, period):
         return df
     except: return pd.DataFrame()
 
-@st.cache_data(ttl=30) # قللنا الكاش عشان السعر يتحدث بسرعة
+@st.cache_data(ttl=30)
 def get_live_quote(ticker):
     try:
         t = yf.Ticker(ticker)
-        
-        # 🌟 1. استخدام fast_info للسعر اللحظي الدقيق (بيحل مشكلة 249.01 بدل 249.09)
         fi = t.fast_info
         live_price = fi.last_price
         prev_close = fi.previous_close
         
         if not live_price:
-            # احتياطي
             df_reg = t.history(period="1d", interval="1m", prepost=False)
             if not df_reg.empty: live_price = df_reg['Close'].iloc[-1]
             
@@ -113,11 +109,9 @@ def get_live_quote(ticker):
         live_change = live_price - prev_close
         live_change_pct = (live_change / prev_close) * 100
 
-        # 🌟 2. جلب البري ماركت (حتى لو السوق فاتح)
         info = t.info
         pre_price = info.get('preMarketPrice')
         
-        # لو مش موجود في info، بنستخرجه من شموع الدقيقة (قبل الساعة 9:30)
         if not pre_price:
             try:
                 df_m = t.history(period="1d", interval="1m", prepost=True)
@@ -278,14 +272,15 @@ if selected_ticker:
         
         main_color = "#00c853" if live_change >= 0 else "#ff3d00"; main_sign = "+" if live_change >= 0 else ""
 
+        # 🌟 إصلاح المسافات البادئة عشان HTML يشتغل صح
         pre_html = ""
         if quote.get('pre_price'):
             pre_color = "#00c853" if quote.get('pre_change', 0) >= 0 else "#ff3d00"; pre_sign = "+" if quote.get('pre_change', 0) >= 0 else ""
             pre_html = f"""
-            <p class="tv-pre-label">🌗 Pre-market</p>
-            <p class="tv-pre-price">{quote.get('pre_price'):.2f} <span class="tv-currency">USD</span></p>
-            <p class="tv-pre-change" style="color: {pre_color};">{pre_sign}{quote.get('pre_change', 0):.2f} ({pre_sign}{quote.get('pre_change_pct', 0):.2f}%)</p>
-            """
+<p class="tv-pre-label">🌗 Pre-market</p>
+<p class="tv-pre-price">{quote.get('pre_price'):.2f} <span class="tv-currency">USD</span></p>
+<p class="tv-pre-change" style="color: {pre_color};">{pre_sign}{quote.get('pre_change', 0):.2f} ({pre_sign}{quote.get('pre_change_pct', 0):.2f}%)</p>
+"""
 
         display_name_header = COMPANY_NAMES.get(selected_ticker, selected_ticker)
         st.markdown(f'<div class="top-bar"><span class="ticker-name">{display_name_header} · {selected_ticker} · {selected_timeframe}</span></div>', unsafe_allow_html=True)
@@ -309,44 +304,45 @@ if selected_ticker:
         score, is_above_mas, is_below_mas, recommendation, intraday_t, swing_t, stock_sl, breakdown = analyze_stock(df, selected_ticker, live_price)
         score_color = "#00c853" if score >= 60 else ("#ff3d00" if score <= 40 else "#ff9800")
 
+        # 🌟 الكود هنا اتظبط عشان ميبقاش فيه مسافات
         st.markdown(f"""
-        <div class="side-card live-card" style="border-left-color: {score_color};">
-        <div class="card-title">🧠 محرك التحليل ({selected_timeframe})</div>
-        <div style="background: {score_color}20; border: 1px solid {score_color}; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 15px;">
-            <div style="font-size: 24px; font-weight: bold; color: {score_color};">درجة الثقة: {score}%</div>
-            <div style="font-size: 16px; font-weight: bold; color: {score_color}; margin-top: 5px;">{recommendation}</div>
-        </div>
-        <div class="tv-price-box">
-            <p class="tv-live-price">{live_price:.2f} <span class="tv-currency">USD</span></p>
-            <p class="tv-live-change" style="color: {main_color};">{main_sign}{live_change:.2f} ({main_sign}{live_change_pct:.2f}%)</p>
-            {pre_html}
-        </div>
-        <div class="points-details"><b>تفصيل النقاط:</b><br>{breakdown}</div>
-        <div style="border-top: 1px solid #2a2e39; margin: 10px 0;"></div>
-        <div style="background: {score_color}15; padding: 10px; border-radius: 5px; margin-top: 10px;">
-            <div class="rec-item"><span class="rec-label">هدف الجلسة:</span> <span style="color:{score_color}; font-weight:bold;">${intraday_t:.2f}</span></div>
-            <div class="rec-item"><span class="rec-label">هدف الانتهاء:</span> <span style="color:{score_color}; font-weight:bold;">${swing_t:.2f}</span></div>
-            <div class="rec-item"><span class="rec-label">وقف الخسارة:</span> <span style="color:#ff3d00; font-weight:bold;">${stock_sl:.2f}</span></div>
-        </div>
-        </div>
-        """, unsafe_allow_html=True)
+<div class="side-card live-card" style="border-left-color: {score_color};">
+<div class="card-title">🧠 محرك التحليل ({selected_timeframe})</div>
+<div style="background: {score_color}20; border: 1px solid {score_color}; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 15px;">
+<div style="font-size: 24px; font-weight: bold; color: {score_color};">درجة الثقة: {score}%</div>
+<div style="font-size: 16px; font-weight: bold; color: {score_color}; margin-top: 5px;">{recommendation}</div>
+</div>
+<div class="tv-price-box">
+<p class="tv-live-price">{live_price:.2f} <span class="tv-currency">USD</span></p>
+<p class="tv-live-change" style="color: {main_color};">{main_sign}{live_change:.2f} ({main_sign}{live_change_pct:.2f}%)</p>
+{pre_html}
+</div>
+<div class="points-details"><b>تفصيل النقاط:</b><br>{breakdown}</div>
+<div style="border-top: 1px solid #2a2e39; margin: 10px 0;"></div>
+<div style="background: {score_color}15; padding: 10px; border-radius: 5px; margin-top: 10px;">
+<div class="rec-item"><span class="rec-label">هدف الجلسة:</span> <span style="color:{score_color}; font-weight:bold;">${intraday_t:.2f}</span></div>
+<div class="rec-item"><span class="rec-label">هدف الانتهاء:</span> <span style="color:{score_color}; font-weight:bold;">${swing_t:.2f}</span></div>
+<div class="rec-item"><span class="rec-label">وقف الخسارة:</span> <span style="color:#ff3d00; font-weight:bold;">${stock_sl:.2f}</span></div>
+</div>
+</div>
+""", unsafe_allow_html=True)
 
         if selected_ticker.isalpha():
             options_rec = get_options_recommendation(selected_ticker, live_price, recommendation)
             if options_rec:
                 st.markdown(f"""
-                <div class="side-card options-card">
-                <div class="card-title">📄 توصية عقود الخيارات (Options)</div>
-                <div class="rec-item"><span class="rec-label">النوع:</span> <span style="color:#00bcd4; font-weight:bold;">{options_rec['type']}</span></div>
-                <div class="rec-item"><span class="rec-label">تاريخ الانتهاء:</span> <span>{options_rec['expiration']}</span></div>
-                <div class="rec-item"><span class="rec-label">Strike:</span> <span>${options_rec['strike']:.2f}</span></div>
-                <div class="rec-item"><span class="rec-label">سعر العقد:</span> <span style="color:#fff; font-weight:bold;">${options_rec['last_price']:.2f}</span></div>
-                <div style="border-top: 1px dashed #2a2e39; margin: 8px 0;"></div>
-                <div class="rec-item"><span class="rec-label">هدف الجلسة (+30%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['session_target']:.2f}</span></div>
-                <div class="rec-item"><span class="rec-label">هدف الانتهاء (+100%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['expiry_target']:.2f}</span></div>
-                <div class="rec-item"><span class="rec-label">وقف الخسارة (-20%):</span> <span style="color:#ff3d00; font-weight:bold;">${options_rec['stop_loss']:.2f}</span></div>
-                </div>
-                """, unsafe_allow_html=True)
+<div class="side-card options-card">
+<div class="card-title">📄 توصية عقود الخيارات (Options)</div>
+<div class="rec-item"><span class="rec-label">النوع:</span> <span style="color:#00bcd4; font-weight:bold;">{options_rec['type']}</span></div>
+<div class="rec-item"><span class="rec-label">تاريخ الانتهاء:</span> <span>{options_rec['expiration']}</span></div>
+<div class="rec-item"><span class="rec-label">Strike:</span> <span>${options_rec['strike']:.2f}</span></div>
+<div class="rec-item"><span class="rec-label">سعر العقد:</span> <span style="color:#fff; font-weight:bold;">${options_rec['last_price']:.2f}</span></div>
+<div style="border-top: 1px dashed #2a2e39; margin: 8px 0;"></div>
+<div class="rec-item"><span class="rec-label">هدف الجلسة (+30%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['session_target']:.2f}</span></div>
+<div class="rec-item"><span class="rec-label">هدف الانتهاء (+100%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['expiry_target']:.2f}</span></div>
+<div class="rec-item"><span class="rec-label">وقف الخسارة (-20%):</span> <span style="color:#ff3d00; font-weight:bold;">${options_rec['stop_loss']:.2f}</span></div>
+</div>
+""", unsafe_allow_html=True)
             else:
                 st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">لا توجد بيانات عقود متاحة لهذا السهم حالياً من السيرفر (أو السوق مغلق).</div></div>', unsafe_allow_html=True)
 
