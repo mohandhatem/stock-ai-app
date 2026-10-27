@@ -54,6 +54,12 @@ div[data-baseweb="select"] input {
 .score-badge { font-size: 24px; font-weight: bold; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 10px;}
 .points-details { font-size: 11px; color: #9ca3af; text-align: right; margin-top: 5px; line-height: 1.6; border-top: 1px dashed #2a2e39; padding-top: 8px; }
 
+/* 🌟 تصميم شبكة البيانات اليونانية */
+.greeks-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 15px; border-top: 1px dashed #2a2e39; padding-top: 15px;}
+.greeks-item { display: flex; justify-content: space-between; font-size: 12px; background: #1e222d; padding: 6px 10px; border-radius: 4px;}
+.greeks-label { color: #888; }
+.greeks-value { color: #00bcd4; font-weight: bold;}
+
 .stPlotlyChart { background-color: #000000; padding-bottom: 5px;}
 </style>
 """, unsafe_allow_html=True)
@@ -63,13 +69,13 @@ st_autorefresh(interval=60000, limit=None, key="live_refresh")
 # ==========================================
 # 2. البيانات والقوائم
 # ==========================================
-US_TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX", "AMD", "INTC", "JPM", "V", "WMT", "DIS", "ORCL", "CRM", "ADBE", "AVGO", "QCOM", "BAC", "GS", "MA", "PYPL", "COST", "NKE", "SBUX", "MCD", "JNJ", "UNH", "PFE", "LLY", "XOM", "CVX", "BA", "PLTR", "IBM", "GE", "CAT", "MMM", "HON", "UPS", "FDX", "T", "VZ", "TMUS", "CMCSA", "CSCO", "TXN", "AMAT", "MU", "LRCX", "SBRC", "SHOP", "SQ", "ROKU", "ZM", "DOCU", "SNOW", "U", "RBLX", "COIN", "HOOD", "SOFI", "AI", "PATH", "NET", "DDOG", "CRWD", "OKTA", "PANW"]
+US_TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX", "AMD", "INTC", "JPM", "V", "WMT", "DIS", "ORCL", "CRM", "ADBE", "AVGO", "QCOM", "BAC", "GS", "MA", "PYPL", "COST", "NKE", "SBUX", "MCD", "JNJ", "UNH", "PFE", "LLY", "XOM", "CVX", "BA", "PLTR", "IBM", "GE", "CAT", "MMM", "HON", "UPS", "FDX", "T", "VZ", "TMUS", "CMCSA", "CSCO", "TXN", "AMAT", "MU", "LRCX", "SBRC", "SHOP", "SQ", "ROKU", "ZM", "DOCU", "SNOW", "U", "RBLX", "COIN", "HOOD", "SOFI", "AI", "PATH", "NET", "DDOG", "CRWD", "OKTA", "PANW", "SMCI"]
 INDICES = {"S&P 500": "^GSPC", "NASDAQ": "^IXIC", "Dow Jones": "^DJI", "Russell 2000": "^RUT", "VIX (التقلب)": "^VIX", "TASI (تاسي)": "^TASI.SR"}
 
 COMPANY_NAMES = {
     "^GSPC": "S&P 500", "^IXIC": "NASDAQ", "^DJI": "Dow Jones", "^RUT": "Russell 2000", "^VIX": "VIX", "^TASI.SR": "TASI (تاسي)",
     "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet", "AMZN": "Amazon", "TSLA": "Tesla", 
-    "NVDA": "NVIDIA", "META": "Meta", "NFLX": "Netflix", "AMD": "AMD", "INTC": "Intel", "JPM": "JPMorgan", "V": "Visa", "WMT": "Walmart", "DIS": "Disney", "ORCL": "Oracle", "CRM": "Salesforce", "ADBE": "Adobe", "AVGO": "Broadcom", "QCOM": "Qualcomm", "BAC": "Bank of America", "GS": "Goldman Sachs", "MA": "Mastercard", "PYPL": "PayPal", "COST": "Costco", "NKE": "Nike", "SBUX": "Starbucks", "MCD": "McDonald's", "JNJ": "Johnson & Johnson", "UNH": "UnitedHealth", "PFE": "Pfizer", "LLY": "Eli Lilly", "XOM": "Exxon Mobil", "CVX": "Chevron", "BA": "Boeing", "PLTR": "Palantir", "IBM": "IBM", "GE": "General Electric", "CAT": "Caterpillar", "MMM": "3M", "HON": "Honeywell", "UPS": "UPS", "FDX": "FedEx", "T": "AT&T", "VZ": "Verizon", "TMUS": "T-Mobile", "CMCSA": "Comcast", "CSCO": "Cisco", "TXN": "Texas Instruments", "AMAT": "Applied Materials", "MU": "Micron", "LRCX": "Lam Research", "SBRC": "Sound Equity", "SHOP": "Shopify", "SQ": "Block (Square)", "ROKU": "Roku", "ZM": "Zoom", "DOCU": "DocuSign", "SNOW": "Snowflake", "U": "Unity", "RBLX": "Roblox", "COIN": "Coinbase", "HOOD": "Robinhood", "SOFI": "SoFi", "AI": "C3.ai", "PATH": "UiPath", "NET": "Cloudflare", "DDOG": "Datadog", "CRWD": "CrowdStrike", "OKTA": "Okta", "PANW": "Palo Alto"
+    "NVDA": "NVIDIA", "META": "Meta", "NFLX": "Netflix", "AMD": "AMD", "INTC": "Intel", "JPM": "JPMorgan", "V": "Visa", "WMT": "Walmart", "DIS": "Disney", "ORCL": "Oracle", "CRM": "Salesforce", "ADBE": "Adobe", "AVGO": "Broadcom", "QCOM": "Qualcomm", "BAC": "Bank of America", "GS": "Goldman Sachs", "MA": "Mastercard", "PYPL": "PayPal", "COST": "Costco", "NKE": "Nike", "SBUX": "Starbucks", "MCD": "McDonald's", "JNJ": "Johnson & Johnson", "UNH": "UnitedHealth", "PFE": "Pfizer", "LLY": "Eli Lilly", "XOM": "Exxon Mobil", "CVX": "Chevron", "BA": "Boeing", "PLTR": "Palantir", "IBM": "IBM", "GE": "General Electric", "CAT": "Caterpillar", "MMM": "3M", "HON": "Honeywell", "UPS": "UPS", "FDX": "FedEx", "T": "AT&T", "VZ": "Verizon", "TMUS": "T-Mobile", "CMCSA": "Comcast", "CSCO": "Cisco", "TXN": "Texas Instruments", "AMAT": "Applied Materials", "MU": "Micron", "LRCX": "Lam Research", "SBRC": "Sound Equity", "SHOP": "Shopify", "SQ": "Block (Square)", "ROKU": "Roku", "ZM": "Zoom", "DOCU": "DocuSign", "SNOW": "Snowflake", "U": "Unity", "RBLX": "Roblox", "COIN": "Coinbase", "HOOD": "Robinhood", "SOFI": "SoFi", "AI": "C3.ai", "PATH": "UiPath", "NET": "Cloudflare", "DDOG": "Datadog", "CRWD": "CrowdStrike", "OKTA": "Okta", "PANW": "Palo Alto", "SMCI": "Super Micro Computer"
 }
 
 MARKETS = {"🇺🇸 أمريكي (US)": US_TICKERS, "📊 المؤشرات (Indices)": list(INDICES.keys())}
@@ -88,7 +94,7 @@ def fetch_data(ticker, interval, period):
         return df
     except: return pd.DataFrame()
 
-@st.cache_data(ttl=5) # تقليل الكاش لـ 5 ثواني عشان السعر يتحدث بسرعة
+@st.cache_data(ttl=5)
 def get_live_quote(ticker):
     try:
         t = yf.Ticker(ticker)
@@ -190,6 +196,7 @@ def evaluate_tickers(tickers, interval, period):
         except: pass
     return results
 
+# 🌟 دالة الخيارات المحدثة لجلب اليونانية
 @st.cache_data(ttl=300)
 def get_options_recommendation(ticker, current_price, general_rec):
     try:
@@ -198,18 +205,43 @@ def get_options_recommendation(ticker, current_price, general_rec):
         target_exp = expirations[0]; chain = stock.option_chain(target_exp)
         calls, puts = chain.calls, chain.puts
         if calls.empty or puts.empty: return None
+        
         chosen = calls.loc[abs(calls['strike'] - current_price).idxmin()] if "شراء" in general_rec else puts.loc[abs(puts['strike'] - current_price).idxmin()]
         option_type = "Call (ATM)" if "شراء" in general_rec else "Put (ATM)"
         last_price = chosen['lastPrice']
+        strike = chosen['strike']
+        
         if last_price == 0: return None
+
+        # استخراج البيانات اليونانية
+        iv = chosen.get('impliedVolatility', 0) * 100
+        delta = chosen.get('delta', 0)
+        gamma = chosen.get('gamma', 0)
+        theta = chosen.get('theta', 0)
+        vega = chosen.get('vega', 0)
+        rho = chosen.get('rho', 0)
+        
+        volume = chosen.get('volume', 0)
+        oi = chosen.get('openInterest', 0)
+
+        # حساب القيمة الجوهرية والخارجية
+        intrinsic = 0
+        if "Call" in option_type and current_price > strike:
+            intrinsic = current_price - strike
+        elif "Put" in option_type and current_price < strike:
+            intrinsic = strike - current_price
+        extrinsic = last_price - intrinsic if last_price > intrinsic else 0
+
         return {
-            "type": option_type, "expiration": target_exp, "strike": chosen['strike'], "last_price": last_price,
-            "session_target": last_price * 1.30, "expiry_target": last_price * 2.00, "stop_loss": last_price * 0.80
+            "type": option_type, "expiration": target_exp, "strike": strike, "last_price": last_price,
+            "session_target": last_price * 1.30, "expiry_target": last_price * 2.00, "stop_loss": last_price * 0.80,
+            "iv": iv, "delta": delta, "gamma": gamma, "theta": theta, "vega": vega, "rho": rho,
+            "volume": volume, "oi": oi, "intrinsic": intrinsic, "extrinsic": extrinsic
         }
     except: return None
 
 # ==========================================
-# 🌟 4. الجزء الخاص بتحديث السعر كل ثانية (Fragment)
+# 4. الجزء الخاص بتحديث السعر كل ثانية
 # ==========================================
 @st.fragment(run_every="1s")
 def render_price_box(ticker):
@@ -304,7 +336,7 @@ if selected_ticker:
         score, is_above_mas, is_below_mas, recommendation, intraday_t, swing_t, stock_sl, breakdown = analyze_stock(df, selected_ticker, quote['live_price'])
         score_color = "#00c853" if score >= 60 else ("#ff3d00" if score <= 40 else "#ff9800")
 
-        # 🌟 الكارت اللي بيتحدث كل ثانية
+        # 🌟 كارت التحليل
         st.markdown(f"""
 <div class="side-card live-card" style="border-left-color: {score_color};">
 <div class="card-title">🧠 محرك التحليل ({selected_timeframe})</div>
@@ -314,10 +346,8 @@ if selected_ticker:
 </div>
 """, unsafe_allow_html=True)
 
-        # 🌟 هنا بنستدعي الفانكشن اللي بتتحدث كل ثانية
         render_price_box(selected_ticker)
 
-        # باقي التحليل
         st.markdown(f"""
 <div class="points-details"><b>تفصيل النقاط:</b><br>{breakdown}</div>
 <div style="border-top: 1px solid #2a2e39; margin: 10px 0;"></div>
@@ -329,7 +359,7 @@ if selected_ticker:
 </div>
 """, unsafe_allow_html=True)
 
-        # 🌟 كارت العقود
+        # 🌟 كارت العقود مع البيانات اليونانية
         if selected_ticker.isalpha():
             options_rec = get_options_recommendation(selected_ticker, quote['live_price'], recommendation)
             if options_rec:
@@ -340,14 +370,29 @@ if selected_ticker:
 <div class="rec-item"><span class="rec-label">تاريخ الانتهاء:</span> <span>{options_rec['expiration']}</span></div>
 <div class="rec-item"><span class="rec-label">Strike:</span> <span>${options_rec['strike']:.2f}</span></div>
 <div class="rec-item"><span class="rec-label">سعر العقد:</span> <span style="color:#fff; font-weight:bold;">${options_rec['last_price']:.2f}</span></div>
+
 <div style="border-top: 1px dashed #2a2e39; margin: 8px 0;"></div>
 <div class="rec-item"><span class="rec-label">هدف الجلسة (+30%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['session_target']:.2f}</span></div>
 <div class="rec-item"><span class="rec-label">هدف الانتهاء (+100%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['expiry_target']:.2f}</span></div>
 <div class="rec-item"><span class="rec-label">وقف الخسارة (-20%):</span> <span style="color:#ff3d00; font-weight:bold;">${options_rec['stop_loss']:.2f}</span></div>
+
+<!-- 🌟 البيانات اليونانية -->
+<div class="greeks-grid">
+<div class="greeks-item"><span class="greeks-label">الحجم:</span> <span class="greeks-value">{options_rec['volume']}</span></div>
+<div class="greeks-item"><span class="greeks-label">الفائدة المفتوحة:</span> <span class="greeks-value">{options_rec['oi']}</span></div>
+<div class="greeks-item"><span class="greeks-label">القيمة الجوهرية:</span> <span class="greeks-value">{options_rec['intrinsic']:.2f}</span></div>
+<div class="greeks-item"><span class="greeks-label">القيمة الخارجية:</span> <span class="greeks-value">{options_rec['extrinsic']:.2f}</span></div>
+<div class="greeks-item"><span class="greeks-label">IV (التقلب):</span> <span class="greeks-value">{options_rec['iv']:.2f}%</span></div>
+<div class="greeks-item"><span class="greeks-label">Delta:</span> <span class="greeks-value">{options_rec['delta']:.3f}</span></div>
+<div class="greeks-item"><span class="greeks-label">Gamma:</span> <span class="greeks-value">{options_rec['gamma']:.3f}</span></div>
+<div class="greeks-item"><span class="greeks-label">Theta:</span> <span class="greeks-value">{options_rec['theta']:.3f}</span></div>
+<div class="greeks-item"><span class="greeks-label">Vega:</span> <span class="greeks-value">{options_rec['vega']:.3f}</span></div>
+<div class="greeks-item"><span class="greeks-label">Rho:</span> <span class="greeks-value">{options_rec['rho']:.3f}</span></div>
+</div>
 </div>
 """, unsafe_allow_html=True)
             else:
-                st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">لا توجد بيانات عقود متاحة لهذا السهم حالياً من السيرفر (أو السوق مغلق).</div></div>', unsafe_allow_html=True)
+                st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">لا توجد بيانات عقود متاحة لهذا السهم حالياً من السيرفر.</div></div>', unsafe_allow_html=True)
 
         # 🌟 كارت الأخبار
         news = fetch_news(selected_ticker)
