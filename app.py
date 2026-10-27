@@ -43,12 +43,14 @@ div[data-baseweb="select"] input {
 .general-card { border-left: 4px solid #ff9800; }
 .card-title { color: #d1d4dc; font-size: 15px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #2a2e39; padding-bottom: 5px;}
 
-/* تنسيق الأسعار زي الصورة */
-.main-price { font-size: 32px; font-weight: bold; margin: 0; line-height: 1.1; color: #fff;}
-.main-price-currency { font-size: 16px; color: #888; font-weight: normal;}
-.main-change { font-size: 16px; font-weight: bold; margin: 2px 0 10px 0;}
-.pre-price { font-size: 20px; font-weight: bold; margin: 0; color: #fff;}
-.pre-change { font-size: 14px; font-weight: bold; margin: 2px 0 0 0;}
+/* 🌟 تنسيق الأسعار زي TradingView */
+.tv-price-box { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin-bottom: 15px; }
+.tv-live-price { font-size: 38px; font-weight: bold; color: #fff; margin: 0; line-height: 1; letter-spacing: -0.5px;}
+.tv-currency { font-size: 18px; color: #b2b5be; font-weight: normal;}
+.tv-live-change { font-size: 18px; font-weight: 600; margin: 5px 0 15px 0; letter-spacing: 0.5px;}
+.tv-pre-label { font-size: 13px; color: #ff9800; margin: 0; display: flex; align-items: center; gap: 5px; font-weight: bold;}
+.tv-pre-price { font-size: 22px; font-weight: bold; color: #fff; margin: 2px 0 0 0; line-height: 1;}
+.tv-pre-change { font-size: 14px; font-weight: 600; margin: 3px 0 0 0;}
 
 .rec-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;}
 .rec-label { color: #888; }
@@ -125,19 +127,19 @@ def fetch_data(ticker, interval, period):
         return df
     except: return pd.DataFrame()
 
-# 🌟 الدالة السحرية لجلب السعر الحقيقي والبري ماركت مع نسبة التغيير
+# 🌟 الدالة دي شغالة عشان تجيب السعر اللحظي والبري ماركت بنسبة 100% ومستقلة تماماً عن الفريم
 @st.cache_data(ttl=60)
 def get_live_quote(ticker):
     try:
         t = yf.Ticker(ticker)
         info = t.info
         
-        # 1. السعر الحقيقي اللحظي
+        # 1. السعر الحقيقي
         live_price = info.get('regularMarketPrice') or info.get('currentPrice')
         prev_close = info.get('regularMarketPreviousClose')
         
         if not live_price:
-            hist = t.history(period="1d")
+            hist = t.history(period="1d", interval="1m")
             if not hist.empty:
                 live_price = hist['Close'].iloc[-1]
                 prev_close = live_price
@@ -148,39 +150,32 @@ def get_live_quote(ticker):
         live_change = live_price - prev_close
         live_change_pct = (live_change / prev_close) * 100
 
-        # 2. سعر البري ماركت (PRE)
+        # 2. البري ماركت
         pre_price = info.get('preMarketPrice')
         pre_change = info.get('preMarketChange')
         pre_change_pct = info.get('preMarketChangePercent')
         
-        # حساب التغيير لو مش موجود
-        if pre_price and prev_close:
+        if pre_price:
             if not pre_change:
                 pre_change = pre_price - prev_close
             if not pre_change_pct:
                 pre_change_pct = (pre_change / prev_close) * 100
 
-        # 3. سعر البوست ماركت (POST)
+        # 3. البوست ماركت
         post_price = info.get('postMarketPrice')
         post_change = info.get('postMarketChange')
         post_change_pct = info.get('postMarketChangePercent')
         
-        if post_price and prev_close:
+        if post_price:
             if not post_change:
                 post_change = post_price - prev_close
             if not post_change_pct:
                 post_change_pct = (post_change / prev_close) * 100
 
         return {
-            "live_price": live_price,
-            "live_change": live_change,
-            "live_change_pct": live_change_pct,
-            "pre_price": pre_price,
-            "pre_change": pre_change,
-            "pre_change_pct": pre_change_pct,
-            "post_price": post_price,
-            "post_change": post_change,
-            "post_change_pct": post_change_pct
+            "live_price": live_price, "live_change": live_change, "live_change_pct": live_change_pct,
+            "pre_price": pre_price, "pre_change": pre_change, "pre_change_pct": pre_change_pct,
+            "post_price": post_price, "post_change": post_change, "post_change_pct": post_change_pct
         }
     except: 
         return None
@@ -401,25 +396,23 @@ if selected_ticker:
         main_color = "#00c853" if live_change >= 0 else "#ff3d00"
         main_sign = "+" if live_change >= 0 else ""
 
-        # 🌟 تصميم البري ماركت زي الصورة بالظبط
+        # 🌟 تصميم البري ماركت والبست ماركت زي TradingView
         pre_html = ""
         if quote['pre_price']:
             pre_color = "#00c853" if quote['pre_change'] >= 0 else "#ff3d00"
             pre_sign = "+" if quote['pre_change'] >= 0 else ""
             pre_html = f"""
-            <p class="pre-price">{quote['pre_price']:.2f} <span class="main-price-currency">USD</span></p>
-            <p class="pre-change" style="color: {pre_color};">{pre_sign}{quote['pre_change']:.2f} ({pre_sign}{quote['pre_change_pct']:.2f}%)</p>
-            <p style="font-size: 12px; color: #ff9800; margin-top: 2px;">🌗 Pre-market</p>
+            <p class="tv-pre-label">🌗 Pre-market</p>
+            <p class="tv-pre-price">{quote['pre_price']:.2f} <span class="tv-currency">USD</span></p>
+            <p class="tv-pre-change" style="color: {pre_color};">{pre_sign}{quote['pre_change']:.2f} ({pre_sign}{quote['pre_change_pct']:.2f}%)</p>
             """
-            
-        # البوست ماركت لو مفيش بري ماركت
         elif quote['post_price']:
             post_color = "#00c853" if quote['post_change'] >= 0 else "#ff3d00"
             post_sign = "+" if quote['post_change'] >= 0 else ""
             pre_html = f"""
-            <p class="pre-price">{quote['post_price']:.2f} <span class="main-price-currency">USD</span></p>
-            <p class="pre-change" style="color: {post_color};">{post_sign}{quote['post_change']:.2f} ({post_sign}{quote['post_change_pct']:.2f}%)</p>
-            <p style="font-size: 12px; color: #ff9800; margin-top: 2px;">🌙 After-hours</p>
+            <p class="tv-pre-label">🌙 After-hours</p>
+            <p class="tv-pre-price">{quote['post_price']:.2f} <span class="tv-currency">USD</span></p>
+            <p class="tv-pre-change" style="color: {post_color};">{post_sign}{quote['post_change']:.2f} ({post_sign}{quote['post_change_pct']:.2f}%)</p>
             """
 
         display_name_header = COMPANY_NAMES.get(selected_ticker, selected_ticker)
@@ -462,20 +455,21 @@ if selected_ticker:
         elif score <= 40: score_color = "#ff3d00"
         else: score_color = "#ff9800"
 
-        # 🌟 عرض السعر بنفس شكل الصورة
+        # 🌟 عرض السعر الحقيقي والبري ماركت (ثابتين مهما تغير الفريم)
         st.markdown(f"""
         <div class="side-card live-card" style="border-left-color: {score_color};">
         <div class="card-title">🧠 محرك التحليل ({selected_timeframe})</div>
         
-        <div style="background: {score_color}20; border: 1px solid {score_color}; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 10px;">
+        <div style="background: {score_color}20; border: 1px solid {score_color}; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 15px;">
             <div style="font-size: 24px; font-weight: bold; color: {score_color};">درجة الثقة: {score}%</div>
             <div style="font-size: 16px; font-weight: bold; color: {score_color}; margin-top: 5px;">{recommendation}</div>
         </div>
         
-        <p class="main-price">{live_price:.2f} <span class="main-price-currency">USD</span></p>
-        <p class="main-change" style="color: {main_color};">{main_sign}{live_change:.2f} ({main_sign}{live_change_pct:.2f}%)</p>
-        
-        {pre_html}
+        <div class="tv-price-box">
+            <p class="tv-live-price">{live_price:.2f} <span class="tv-currency">USD</span></p>
+            <p class="tv-live-change" style="color: {main_color};">{main_sign}{live_change:.2f} ({main_sign}{live_change_pct:.2f}%)</p>
+            {pre_html}
+        </div>
         
         <div class="points-details">
             <b>تفصيل النقاط:</b><br>
