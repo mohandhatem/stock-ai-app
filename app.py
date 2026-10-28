@@ -8,31 +8,16 @@ from streamlit_autorefresh import st_autorefresh
 import datetime
 import time
 import pytz
-import os
+import finnhub
 
 # ==========================================
-# استيراد المكتبات الاختيارية (لجلب عقود الخيارات)
+# 1. إعدادات Finnhub API (مفتاحك الخاص)
 # ==========================================
-try:
-    from lumiwealth_tradier import Tradier
-    TRADIER_AVAILABLE = True
-except ImportError:
-    TRADIER_AVAILABLE = False
-
-try:
-    from schwab import auth, client
-    SCHWAB_AVAILABLE = True
-except ImportError:
-    SCHWAB_AVAILABLE = False
-
-try:
-    from polygon import RESTClient
-    POLYGON_AVAILABLE = True
-except ImportError:
-    POLYGON_AVAILABLE = False
+FINNHUB_API_KEY = "dbgvuopr01qjpoc3igsgdbgvuopr01qjpoc3igt0"
+finnhub_client = finnhub.Client(api_key=FINNHUB_API_KEY)
 
 # ==========================================
-# 1. إعدادات الصفحة والتصميم
+# 2. إعدادات الصفحة والتصميم
 # ==========================================
 st.set_page_config(page_title="Pro Trading Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
@@ -74,16 +59,8 @@ div[data-baseweb="select"] input { pointer-events: none !important; user-select:
 </style>
 """, unsafe_allow_html=True)
 
+# تحديث الصفحة كل 60 ثانية للشارت والبيانات التاريخية
 st_autorefresh(interval=60000, limit=None, key="live_refresh")
-
-# ==========================================
-# 2. إعدادات مفاتيح API (ضع مفاتيحك هنا إذا كانت لديك)
-# ==========================================
-TRADIER_TOKEN = os.environ.get("TRADIER_TOKEN", "")
-TRADIER_ACCT = os.environ.get("TRADIER_ACCT", "")
-SCHWAB_APP_KEY = os.environ.get("SCHWAB_APP_KEY", "")
-SCHWAB_APP_SECRET = os.environ.get("SCHWAB_APP_SECRET", "")
-POLYGON_API_KEY = os.environ.get("POLYGON_API_KEY", "")
 
 def get_market_session():
     eastern = pytz.timezone('US/Eastern')
@@ -109,7 +86,7 @@ MARKETS = {"🇺🇸 أمريكي (US)": US_TICKERS, "📊 المؤشرات (Ind
 TIMEFRAMES = {"1m": {"interval": "1m", "period": "7d"}, "5m": {"interval": "5m", "period": "60d"}, "15m": {"interval": "15m", "period": "60d"}, "30m": {"interval": "30m", "period": "60d"}, "1h": {"interval": "60m", "period": "730d"}, "1d": {"interval": "1d", "period": "5y"}}
 
 # ==========================================
-# 4. دوال جلب البيانات الأساسية
+# 4. دوال جلب البيانات (Finnhub للسعر، yfinance للشارت)
 # ==========================================
 @st.cache_data(ttl=60)
 def fetch_data(ticker, interval, period):
@@ -123,17 +100,34 @@ def fetch_data(ticker, interval, period):
 
 @st.cache_data(ttl=5)
 def get_live_quote(ticker):
+    # 1. Finnhub للسعر اللحظي
+    try:
+        quote = finnhub_client.quote(ticker)
+        if quote['c'] != 0 and quote['pc'] != 0:
+            session = get_market_session()
+            pre_price = None; pre_change = None; pre_change_pct = None
+            
+            # جلب البري ماركت من yfinance لو السوق مقفول
+            if session in ["PRE", "CLOSED"]:
+                try:
+                    t = yf.Ticker(ticker)
+                    temp_pre = t.info.get('preMarketPrice')
+                    if temp_pre:
+                        pre_price = temp_pre
+                        pre_change = pre_price - quote['pc']
+                        pre_change_pct = (pre_change / quote['pc']) * 100
+                except: pass
+
+            return {"live_price": quote['c'], "live_change": quote['d'], "live_change_pct": quote['dp'], "pre_price": pre_price, "pre_change": pre_change, "pre_change_pct": pre_change_pct, "session": session}
+    except:
+        pass # لو فين هب فشل، نروح للياهو
+
+    # 2. yfinance كاحتياطي
     try:
         t = yf.Ticker(ticker)
         fi = t.fast_info
         live_price = fi.last_price
         prev_close = fi.previous_close
-        if not live_price:
-            df_reg = t.history(period="1d", interval="1m", prepost=False)
-            if not df_reg.empty: live_price = df_reg['Close'].iloc[-1]
-        if not prev_close:
-            df_daily = t.history(period="5d", interval="1d")
-            if len(df_daily) > 1: prev_close = df_daily['Close'].iloc[-2]
         if not live_price: return None
         if not prev_close: prev_close = live_price
 
@@ -143,20 +137,14 @@ def get_live_quote(ticker):
         
         pre_price = None; pre_change = None; pre_change_pct = None
         if session in ["PRE", "CLOSED"]:
-            info = t.info
-            temp_pre = info.get('preMarketPrice')
-            if not temp_pre:
-                try:
-                    df_m = t.history(period="1d", interval="1m", prepost=True)
-                    if not df_m.empty:
-                        df_m.index = df_m.index.tz_convert('America/New_York')
-                        pre_df = df_m[df_m.index.time < datetime.time(9, 30)]
-                        if not pre_df.empty: temp_pre = pre_df['Close'].iloc[-1]
-                except: pass
-            if temp_pre:
-                pre_price = temp_pre
-                pre_change = pre_price - prev_close
-                pre_change_pct = (pre_change / prev_close) * 100
+            try:
+                info = t.info
+                temp_pre = info.get('preMarketPrice')
+                if temp_pre:
+                    pre_price = temp_pre
+                    pre_change = pre_price - prev_close
+                    pre_change_pct = (pre_change / prev_close) * 100
+            except: pass
 
         return {"live_price": live_price, "live_change": live_change, "live_change_pct": live_change_pct, "pre_price": pre_price, "pre_change": pre_change, "pre_change_pct": pre_change_pct, "session": session}
     except: return None
@@ -174,14 +162,18 @@ def fetch_news(ticker):
 def calculate_technical_score(df, ticker, live_price):
     if df.empty or len(df) < 50 or not live_price: return 50, False, False, "بيانات غير كافية", 0, 0, 0, "لا توجد بيانات"
     close, high, low, volume = df['Close'], df['High'], df['Low'], df['Volume']
+    
+    # ATR
     tr = pd.concat([high - low, (high - close.shift()).abs(), (low - close.shift()).abs()], axis=1).max(axis=1)
     atr = tr.rolling(14).mean().iloc[-1]
     
+    # Trend (SMA 50 & 200)
     sma50 = close.rolling(50).mean().iloc[-1]
     sma200 = close.rolling(200).mean().iloc[-1] if len(close) >= 200 else sma50
     is_uptrend = (live_price > sma50) and (sma50 > sma200)
     is_downtrend = (live_price < sma50) and (sma50 < sma200)
     
+    # Momentum (RSI, MACD, Stochastic, Williams %R)
     delta = close.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -198,18 +190,20 @@ def calculate_technical_score(df, ticker, live_price):
     stoch_bullish = stoch_k > stoch_d and stoch_k < 80
     williams_r = -100 * ((highest_high - close) / (highest_high - lowest_low)).iloc[-1]
     
+    # Volume (OBV)
     avg_vol = volume.rolling(20).mean().iloc[-1]
     vol_spike = volume.iloc[-1] > (avg_vol * 1.5)
     obv = (np.sign(close.diff()) * volume).fillna(0).cumsum()
     obv_uptrend = obv.iloc[-1] > obv.rolling(20).mean().iloc[-1]
     
+    # Bollinger Bands
     bb_middle = close.rolling(window=20).mean()
     bb_std = close.rolling(window=20).std()
     bb_upper = bb_middle + (bb_std * 2)
     bb_lower = bb_middle - (bb_std * 2)
-    near_upper_bb = live_price >= bb_upper.iloc[-1]
     near_lower_bb = live_price <= bb_lower.iloc[-1]
 
+    # Scoring
     score = 50
     breakdown = []
     
@@ -259,56 +253,28 @@ def evaluate_tickers(tickers, interval, period):
             if len(df) < 50 or not quote: continue
             score, is_uptrend, is_downtrend, rec, _, _, _, _ = calculate_technical_score(df, t, quote['live_price'])
             results[t] = {'score': score, 'is_above_mas': is_uptrend, 'is_below_mas': is_downtrend, 'rec': rec}
-            time.sleep(0.2) 
+            time.sleep(0.1) # تأخير بسيط لتجنب الحظر
         except: pass
     return results
 
 # ==========================================
-# 6. دالة جلب عقود الخيارات (نظام التبديل التلقائي)
+# 6. دالة جلب عقود الخيارات
 # ==========================================
 @st.cache_data(ttl=300)
 def get_option_chain_fallback(ticker):
     if not ticker.isalpha(): return None, "NOT_US_STOCK"
 
-    # 1. yfinance
-    try:
-        stock = yf.Ticker(ticker)
-        expirations = stock.options
-        if expirations:
-            chain = stock.option_chain(expirations[0])
-            if not chain.calls.empty and not chain.puts.empty:
-                return {"calls": chain.calls, "puts": chain.puts, "expiration": expirations[0]}, "yfinance"
-    except: pass
-
-    # 2. Tradier
-    if TRADIER_AVAILABLE and TRADIER_TOKEN:
+    # yfinance مع 3 محاولات
+    for attempt in range(3):
         try:
-            tradier = Tradier(TRADIER_ACCT, TRADIER_TOKEN, is_paper=True)
-            exps_resp = tradier.market.get_options_expirations(ticker)
-            exps = exps_resp['expirations']['date']
-            if exps:
-                chain_data = tradier.market.get_chains(ticker, exps[0], greeks=True)
-                calls = pd.DataFrame(chain_data['options']['option'])
-                calls = calls[calls['option_type'] == 'call']
-                puts = pd.DataFrame(chain_data['options']['option'])
-                puts = puts[puts['option_type'] == 'put']
-                if not calls.empty and not puts.empty:
-                    return {"calls": calls, "puts": puts, "expiration": exps[0]}, "Tradier"
-        except: pass
-
-    # 3. Polygon
-    if POLYGON_AVAILABLE and POLYGON_API_KEY:
-        try:
-            client_poly = RESTClient(POLYGON_API_KEY)
-            contracts = []
-            for c in client_poly.list_options_contracts(ticker, expired=False, limit=10):
-                contracts.append(c)
-            if contracts:
-                calls = pd.DataFrame([c.__dict__ for c in contracts if c.contract_type == 'call'])
-                puts = pd.DataFrame([c.__dict__ for c in contracts if c.contract_type == 'put'])
-                if not calls.empty and not puts.empty:
-                    return {"calls": calls, "puts": puts, "expiration": "N/A"}, "Polygon"
-        except: pass
+            stock = yf.Ticker(ticker)
+            expirations = stock.options
+            if expirations:
+                chain = stock.option_chain(expirations[0])
+                if not chain.calls.empty and not chain.puts.empty:
+                    return {"calls": chain.calls, "puts": chain.puts, "expiration": expirations[0]}, "yfinance"
+            time.sleep(1)
+        except: time.sleep(1)
 
     return None, "NO_DATA"
 
@@ -356,9 +322,9 @@ def get_options_recommendation(ticker, current_price, general_rec):
     except: return "NO_DATA"
 
 # ==========================================
-# 7. تحديث السعر كل ثانية (Fragment)
+# 7. تحديث السعر كل ثانيتين (Fragment)
 # ==========================================
-@st.fragment(run_every="1s")
+@st.fragment(run_every="2s")
 def render_price_box(ticker):
     quote = get_live_quote(ticker)
     if quote:
@@ -481,7 +447,7 @@ if selected_ticker:
             if options_rec == "NOT_US_STOCK":
                 st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">عقود الخيارات متاحة للأسهم الأمريكية فقط.</div></div>', unsafe_allow_html=True)
             elif options_rec == "NO_DATA":
-                st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">⚠️ جميع المصادر رفضت جلب البيانات. تأكد من مفاتيح API أو حاول لاحقاً.</div></div>', unsafe_allow_html=True)
+                st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">⚠️ ياهو فاينانس مرفضش يجيب البيانات دلوقتي. جرب سهم تاني أو أعد المحاولة بعد شوية (مشكلة من السيرفر).</div></div>', unsafe_allow_html=True)
             elif options_rec == "NO_OPTION_FOR_HOLD":
                 st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">التوصية الحالية "احتفاظ"، لا يفضل فتح عقود خيارات الآن.</div></div>', unsafe_allow_html=True)
             elif options_rec:
@@ -519,7 +485,7 @@ if selected_ticker:
             chain_data, source = get_option_chain_fallback(selected_ticker)
             
             if chain_data is None:
-                st.warning("لا توجد خيارات متاحة لهذا السهم حالياً (جميع المصادر فشلت).")
+                st.warning("لا توجد خيارات متاحة لهذا السهم حالياً (ياهو فاينانس مرفض). جرب سهم آخر.")
             else:
                 calls = chain_data['calls']; puts = chain_data['puts']; expiration = chain_data['expiration']
                 st.info(f"المصدر: {source} | تاريخ الانتهاء: {expiration}")
