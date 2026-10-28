@@ -10,7 +10,9 @@ import time
 import pytz
 import os
 
-# استيراد المكتبات الاختيارية
+# ==========================================
+# استيراد المكتبات الاختيارية (لجلب عقود الخيارات)
+# ==========================================
 try:
     from lumiwealth_tradier import Tradier
     TRADIER_AVAILABLE = True
@@ -18,7 +20,7 @@ except ImportError:
     TRADIER_AVAILABLE = False
 
 try:
-    from schwabpy import SchwabClient
+    from schwab import auth, client
     SCHWAB_AVAILABLE = True
 except ImportError:
     SCHWAB_AVAILABLE = False
@@ -28,12 +30,6 @@ try:
     POLYGON_AVAILABLE = True
 except ImportError:
     POLYGON_AVAILABLE = False
-
-try:
-    from alpha_vantage.options import Options
-    ALPHA_VANTAGE_AVAILABLE = True
-except ImportError:
-    ALPHA_VANTAGE_AVAILABLE = False
 
 # ==========================================
 # 1. إعدادات الصفحة والتصميم
@@ -81,14 +77,13 @@ div[data-baseweb="select"] input { pointer-events: none !important; user-select:
 st_autorefresh(interval=60000, limit=None, key="live_refresh")
 
 # ==========================================
-# 2. إعدادات مفاتيح API (ضع مفاتيحك هنا أو في متغيرات البيئة)
+# 2. إعدادات مفاتيح API (ضع مفاتيحك هنا إذا كانت لديك)
 # ==========================================
 TRADIER_TOKEN = os.environ.get("TRADIER_TOKEN", "")
 TRADIER_ACCT = os.environ.get("TRADIER_ACCT", "")
 SCHWAB_APP_KEY = os.environ.get("SCHWAB_APP_KEY", "")
 SCHWAB_APP_SECRET = os.environ.get("SCHWAB_APP_SECRET", "")
 POLYGON_API_KEY = os.environ.get("POLYGON_API_KEY", "")
-ALPHA_VANTAGE_KEY = os.environ.get("ALPHA_VANTAGE_KEY", "")
 
 def get_market_session():
     eastern = pytz.timezone('US/Eastern')
@@ -191,9 +186,11 @@ def calculate_technical_score(df, ticker, live_price):
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rsi = 100 - (100 / (1 + (gain / loss))).iloc[-1]
+    
     macd = close.ewm(span=12, adjust=False).mean() - close.ewm(span=26, adjust=False).mean()
     signal = macd.ewm(span=9, adjust=False).mean()
     macd_bullish = macd.iloc[-1] > signal.iloc[-1]
+    
     lowest_low = low.rolling(window=14).min()
     highest_high = high.rolling(window=14).max()
     stoch_k = 100 * ((close - lowest_low) / (highest_high - lowest_low)).iloc[-1]
@@ -273,7 +270,7 @@ def evaluate_tickers(tickers, interval, period):
 def get_option_chain_fallback(ticker):
     if not ticker.isalpha(): return None, "NOT_US_STOCK"
 
-    # 1. المصدر الأساسي: yfinance
+    # 1. yfinance
     try:
         stock = yf.Ticker(ticker)
         expirations = stock.options
@@ -283,7 +280,7 @@ def get_option_chain_fallback(ticker):
                 return {"calls": chain.calls, "puts": chain.puts, "expiration": expirations[0]}, "yfinance"
     except: pass
 
-    # 2. المصدر الاحتياطي الأول: Tradier
+    # 2. Tradier
     if TRADIER_AVAILABLE and TRADIER_TOKEN:
         try:
             tradier = Tradier(TRADIER_ACCT, TRADIER_TOKEN, is_paper=True)
@@ -299,25 +296,12 @@ def get_option_chain_fallback(ticker):
                     return {"calls": calls, "puts": puts, "expiration": exps[0]}, "Tradier"
         except: pass
 
-    # 3. المصدر الاحتياطي الثاني: Schwab
-    if SCHWAB_AVAILABLE and SCHWAB_APP_KEY:
-        try:
-            client = SchwabClient(client_id=SCHWAB_APP_KEY, client_secret=SCHWAB_APP_SECRET, redirect_uri="https://127.0.0.1")
-            expirations = client.market_data.get_option_expirations(ticker)
-            if expirations:
-                chain = client.market_data.get_option_chain(ticker, contract_type="ALL")
-                calls = pd.DataFrame(chain['callExpDateMap'])
-                puts = pd.DataFrame(chain['putExpDateMap'])
-                if not calls.empty and not puts.empty:
-                    return {"calls": calls, "puts": puts, "expiration": expirations[0]}, "Schwab"
-        except: pass
-
-    # 4. المصدر الاحتياطي الثالث: Polygon
+    # 3. Polygon
     if POLYGON_AVAILABLE and POLYGON_API_KEY:
         try:
-            client = RESTClient(POLYGON_API_KEY)
+            client_poly = RESTClient(POLYGON_API_KEY)
             contracts = []
-            for c in client.list_options_contracts(ticker, expired=False, limit=10):
+            for c in client_poly.list_options_contracts(ticker, expired=False, limit=10):
                 contracts.append(c)
             if contracts:
                 calls = pd.DataFrame([c.__dict__ for c in contracts if c.contract_type == 'call'])
@@ -333,8 +317,7 @@ def get_options_recommendation(ticker, current_price, general_rec):
     if not ticker.isalpha(): return "NOT_US_STOCK"
 
     chain_data, source = get_option_chain_fallback(ticker)
-    if chain_data is None:
-        return "NO_DATA"
+    if chain_data is None: return "NO_DATA"
 
     calls = chain_data['calls']; puts = chain_data['puts']
     expiration = chain_data['expiration']
@@ -370,8 +353,7 @@ def get_options_recommendation(ticker, current_price, general_rec):
             "volume": volume, "oi": oi, "intrinsic": intrinsic, "extrinsic": extrinsic,
             "source": source
         }
-    except:
-        return "NO_DATA"
+    except: return "NO_DATA"
 
 # ==========================================
 # 7. تحديث السعر كل ثانية (Fragment)
@@ -549,7 +531,6 @@ if selected_ticker:
                     else: df['Moneyness'] = np.where(df['strike'] > live_price, 'ITM 🟢', 'OTM 🔴')
                     
                     cols = ['strike', 'lastPrice', 'bid', 'ask', 'volume', 'openInterest', 'impliedVolatility', 'Moneyness']
-                    # إضافة Greeks إذا كانت متوفرة
                     for greek in ['delta', 'gamma', 'theta', 'vega']:
                         if greek in df.columns: cols.append(greek)
                     
