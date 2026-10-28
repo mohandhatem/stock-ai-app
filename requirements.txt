@@ -5,7 +5,4 @@ pandas
 numpy
 streamlit-autorefresh
 pytz
-lumiwealth-tradier
-schwab-py
-polygon-api-client
-alpha_vantage
+finnhub-python
