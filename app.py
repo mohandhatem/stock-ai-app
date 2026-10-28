@@ -82,7 +82,7 @@ MARKETS = {"🇺🇸 أمريكي (US)": US_TICKERS, "📊 المؤشرات (Ind
 TIMEFRAMES = {"1m": {"interval": "1m", "period": "7d"}, "5m": {"interval": "5m", "period": "60d"}, "15m": {"interval": "15m", "period": "60d"}, "30m": {"interval": "30m", "period": "60d"}, "1h": {"interval": "60m", "period": "730d"}, "1d": {"interval": "1d", "period": "5y"}}
 
 # ==========================================
-# 3. دوال جلب البيانات
+# 3. دوال جلب البيانات والسعر اللحظي
 # ==========================================
 @st.cache_data(ttl=60)
 def fetch_data(ticker, interval, period):
@@ -105,7 +105,6 @@ def get_live_quote(ticker):
         if not live_price:
             df_reg = t.history(period="1d", interval="1m", prepost=False)
             if not df_reg.empty: live_price = df_reg['Close'].iloc[-1]
-            
         if not prev_close:
             df_daily = t.history(period="5d", interval="1d")
             if len(df_daily) > 1: prev_close = df_daily['Close'].iloc[-2]
@@ -144,43 +143,138 @@ def fetch_news(ticker):
         return [n['title'] for n in news[:3]] if news else []
     except: return []
 
-def analyze_stock(df, ticker, live_price):
+# ==========================================
+# 4. محرك التحليل الفني الجديد (المعادلة الذهبية)
+# ==========================================
+def calculate_technical_score(df, ticker, live_price):
     if df.empty or len(df) < 50 or not live_price: return 50, False, False, "بيانات غير كافية", 0, 0, 0, "لا توجد بيانات"
+    
     close, high, low, volume = df['Close'], df['High'], df['Low'], df['Volume']
-    atr = (high - low).rolling(14).mean().iloc[-1]
-    sma20, sma30, sma50 = close.rolling(20).mean().iloc[-1], close.rolling(30).mean().iloc[-1], close.rolling(50).mean().iloc[-1]
-    is_above_mas = (live_price > sma20) and (sma20 > sma30) and (sma30 > sma50)
-    is_below_mas = (live_price < sma20) and (sma20 < sma30) and (sma30 < sma50)
-    score = 50; breakdown = ["نقاط البداية: 50"]
-    if is_above_mas: score += 15; breakdown.append("فوق المتوسطات: +15")
-    elif is_below_mas: score -= 15; breakdown.append("تحت المتوسطات: -15")
-    delta = close.diff(); gain = (delta.where(delta > 0, 0)).rolling(window=14).mean(); loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    
+    # --- 1. التقلب (ATR) لتحديد الأهداف ووقف الخسارة ---
+    tr = pd.concat([high - low, (high - close.shift()).abs(), (low - close.shift()).abs()], axis=1).max(axis=1)
+    atr = tr.rolling(14).mean().iloc[-1]
+    
+    # --- 2. الاتجاه (Trend) ---
+    sma50 = close.rolling(50).mean().iloc[-1]
+    sma200 = close.rolling(200).mean().iloc[-1] if len(close) >= 200 else sma50
+    is_uptrend = (live_price > sma50) and (sma50 > sma200)
+    is_downtrend = (live_price < sma50) and (sma50 < sma200)
+    
+    # --- 3. الزخم (Momentum) ---
+    delta = close.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rsi = 100 - (100 / (1 + (gain / loss))).iloc[-1]
-    if 50 <= rsi < 70: score += 10; breakdown.append("RSI إيجابي: +10")
-    elif rsi >= 70: score -= 10; breakdown.append("RSI تشبع شرائي: -10")
-    elif rsi <= 30: score += 10; breakdown.append("RSI تشبع بيعي: +10")
-    macd = close.ewm(span=12, adjust=False).mean() - close.ewm(span=26, adjust=False).mean(); signal = macd.ewm(span=9, adjust=False).mean()
-    if macd.iloc[-1] > signal.iloc[-1]: score += 10; breakdown.append("MACD إيجابي: +10")
-    else: score -= 10; breakdown.append("MACD سلبي: -10")
-    lowest_low = low.rolling(window=14).min(); highest_high = high.rolling(window=14).max(); stoch_k = 100 * ((close - lowest_low) / (highest_high - lowest_low)); stoch_d = stoch_k.rolling(window=3).mean()
-    if stoch_k.iloc[-1] > stoch_d.iloc[-1] and stoch_k.iloc[-1] < 80: score += 5; breakdown.append("Stochastic إيجابي: +5")
-    elif stoch_k.iloc[-1] < stoch_d.iloc[-1] and stoch_k.iloc[-1] > 20: score -= 5; breakdown.append("Stochastic سلبي: -5")
-    bb_middle = close.rolling(window=20).mean(); bb_std = close.rolling(window=20).std(); bb_upper = bb_middle + (bb_std * 2); bb_lower = bb_middle - (bb_std * 2)
-    if live_price <= bb_lower.iloc[-1]: score += 10; breakdown.append("دعم بولينجر: +10")
-    elif live_price >= bb_upper.iloc[-1]: score -= 10; breakdown.append("مقاومة بولينجر: -10")
-    if live_price >= high.tail(20).max() * 0.99: score += 10; breakdown.append("اختراق سعري: +10")
-    if volume.iloc[-1] > volume.rolling(20).mean().iloc[-1] * 1.5: score += 10; breakdown.append("انفجار سيولة: +10")
-    score = max(10, min(95, score)); breakdown.append(f"<b>الإجمالي: {score}%</b>")
-    if score >= 65:
-        rec = "شراء قوي (STRONG BUY)" if is_above_mas else "شراء (BUY)"
-        intraday_target = live_price + (atr * 1.0); swing_target = live_price + (atr * 3.0); stop_loss = live_price - (atr * 1.5)
+    
+    macd = close.ewm(span=12, adjust=False).mean() - close.ewm(span=26, adjust=False).mean()
+    signal = macd.ewm(span=9, adjust=False).mean()
+    macd_bullish = macd.iloc[-1] > signal.iloc[-1]
+    
+    lowest_low = low.rolling(window=14).min()
+    highest_high = high.rolling(window=14).max()
+    stoch_k = 100 * ((close - lowest_low) / (highest_high - lowest_low)).iloc[-1]
+    stoch_d = (100 * ((close - lowest_low) / (highest_high - lowest_low))).rolling(window=3).mean().iloc[-1]
+    stoch_bullish = stoch_k > stoch_d and stoch_k < 80
+    
+    williams_r = -100 * ((highest_high - close) / (highest_high - lowest_low)).iloc[-1]
+    
+    # --- 4. السيولة والحجم (Volume) ---
+    avg_vol = volume.rolling(20).mean().iloc[-1]
+    vol_spike = volume.iloc[-1] > (avg_vol * 1.5)
+    
+    obv = (np.sign(close.diff()) * volume).fillna(0).cumsum()
+    obv_uptrend = obv.iloc[-1] > obv.rolling(20).mean().iloc[-1]
+    
+    # --- 5. التقلب (Bollinger Bands) ---
+    bb_middle = close.rolling(window=20).mean()
+    bb_std = close.rolling(window=20).std()
+    bb_upper = bb_middle + (bb_std * 2)
+    bb_lower = bb_middle - (bb_std * 2)
+    near_upper_bb = live_price >= bb_upper.iloc[-1]
+    near_lower_bb = live_price <= bb_lower.iloc[-1]
+
+    # --- التقييم بناءً على المعادلة الذهبية ---
+    score = 50
+    breakdown = []
+    
+    # 1. الاتجاه (Trend)
+    if is_uptrend:
+        score += 15
+        breakdown.append("اتجاه صاعد قوي (Trend)")
+    elif is_downtrend:
+        score -= 15
+        breakdown.append("اتجاه هابط قوي (Trend)")
+    else:
+        breakdown.append("اتجاه عرضي (Trend)")
+
+    # 2. الزخم (Momentum)
+    if macd_bullish and 50 <= rsi < 70:
+        score += 10
+        breakdown.append("زخم إيجابي (MACD+RSI)")
+    elif not macd_bullish and rsi >= 70:
+        score -= 5
+        breakdown.append("تشبع شرائي (RSI)")
+    elif stoch_bullish:
+        score += 5
+        breakdown.append("تقاطع ستوكاستيك إيجابي")
+        
+    if williams_r < -80:
+        score += 5
+        breakdown.append("تشبع بيعي (Williams %R)")
+
+    # 3. السيولة (Volume)
+    if vol_spike and obv_uptrend:
+        score += 15
+        breakdown.append("تدفق سيولة وحجم قوي")
+    elif not obv_uptrend:
+        score -= 10
+        breakdown.append("ضعف في السيولة (OBV)")
+
+    # 4. نقاط الانعكاس (Price Action)
+    recent_high = high.tail(20).max()
+    if live_price >= recent_high * 0.99:
+        score += 10
+        breakdown.append("اختراق قمة سعرية")
+    elif near_lower_bb:
+        score += 5
+        breakdown.append("ارتداد من دعم بولينجر")
+
+    # --- القرار النهائي ---
+    score = max(10, min(95, score))
+    
+    if score >= 75:
+        rec = "شراء قوي (STRONG BUY)"
+        entry = live_price
+        t1 = live_price + (atr * 1.5)
+        t2 = live_price + (atr * 3.0)
+        stop = live_price - (atr * 1.5)
+    elif score >= 60:
+        rec = "شراء (BUY)"
+        entry = live_price
+        t1 = live_price + (atr * 1.0)
+        t2 = live_price + (atr * 2.0)
+        stop = live_price - (atr * 1.2)
+    elif score <= 25:
+        rec = "بيع قوي (STRONG SELL)"
+        entry = live_price
+        t1 = live_price - (atr * 1.5)
+        t2 = live_price - (atr * 3.0)
+        stop = live_price + (atr * 1.5)
     elif score <= 40:
-        rec = "بيع قوي (STRONG SELL)" if is_below_mas else "بيع (SELL)"
-        intraday_target = live_price - (atr * 1.0); swing_target = live_price - (atr * 3.0); stop_loss = live_price + (atr * 1.5)
+        rec = "بيع (SELL)"
+        entry = live_price
+        t1 = live_price - (atr * 1.0)
+        t2 = live_price - (atr * 2.0)
+        stop = live_price + (atr * 1.2)
     else:
         rec = "احتفاظ (HOLD)"
-        intraday_target = live_price; swing_target = live_price; stop_loss = live_price - (atr * 1.5)
-    return score, is_above_mas, is_below_mas, rec, intraday_target, swing_target, stop_loss, "<br>".join(breakdown)
+        entry = live_price
+        t1 = live_price
+        t2 = live_price
+        stop = live_price
+
+    return score, is_uptrend, is_downtrend, rec, t1, t2, stop, "<br>".join(breakdown)
 
 @st.cache_data(ttl=600)
 def evaluate_tickers(tickers, interval, period):
@@ -190,25 +284,29 @@ def evaluate_tickers(tickers, interval, period):
             df = fetch_data(t, interval, period)
             quote = get_live_quote(t)
             if len(df) < 50 or not quote: continue
-            score, is_above_mas, is_below_mas, rec, _, _, _, _ = analyze_stock(df, t, quote['live_price'])
-            results[t] = {'score': score, 'is_above_mas': is_above_mas, 'is_below_mas': is_below_mas, 'rec': rec}
+            score, is_uptrend, is_downtrend, rec, _, _, _, _ = calculate_technical_score(df, t, quote['live_price'])
+            results[t] = {'score': score, 'is_above_mas': is_uptrend, 'is_below_mas': is_downtrend, 'rec': rec}
             time.sleep(0.2) 
         except: pass
     return results
 
-# 🌟 دالة العقود مع إعادة المحاولة
+# ==========================================
+# 5. عقود الخيارات (للسوق الأمريكي فقط)
+# ==========================================
 @st.cache_data(ttl=300)
 def get_options_recommendation(ticker, current_price, general_rec):
+    # التأكد إنه سهم أمريكي (مش مؤشر أو سوق تاني)
+    if not ticker.isalpha(): return "NOT_US_STOCK"
+
     expirations = []
-    # بنحاول 3 مرات عشان نتغلب على مشكلة ياهو فاينانس
+    # محاولة جلب التواريخ 3 مرات لتجاوز أعطال yfinance
     for attempt in range(3):
         try:
             stock = yf.Ticker(ticker)
             expirations = stock.options
             if expirations: break
-            time.sleep(1) # استنى ثانية وجرب تاني
-        except:
-            time.sleep(1)
+            time.sleep(1) 
+        except: time.sleep(1)
             
     if not expirations: return "NO_DATA"
 
@@ -219,10 +317,17 @@ def get_options_recommendation(ticker, current_price, general_rec):
         calls, puts = chain.calls, chain.puts
         if calls.empty or puts.empty: return "NO_DATA"
         
-        chosen = calls.loc[abs(calls['strike'] - current_price).idxmin()] if "شراء" in general_rec else puts.loc[abs(puts['strike'] - current_price).idxmin()]
-        option_type = "Call (ATM)" if "شراء" in general_rec else "Put (ATM)"
+        # اختيار العقد بناءً على التوصية
+        if "شراء" in general_rec:
+            chosen = calls.loc[abs(calls['strike'] - current_price).idxmin()]
+            option_type = "Call (ATM)"
+        elif "بيع" in general_rec:
+            chosen = puts.loc[abs(puts['strike'] - current_price).idxmin()]
+            option_type = "Put (ATM)"
+        else:
+            return "NO_OPTION_FOR_HOLD"
+            
         last_price = chosen['lastPrice']; strike = chosen['strike']
-        
         if last_price == 0: return "NO_DATA"
 
         iv = chosen.get('impliedVolatility', 0) * 100
@@ -245,7 +350,7 @@ def get_options_recommendation(ticker, current_price, general_rec):
         return "NO_DATA"
 
 # ==========================================
-# 4. تحديث السعر كل ثانية
+# 6. تحديث السعر كل ثانية (Fragment)
 # ==========================================
 @st.fragment(run_every="1s")
 def render_price_box(ticker):
@@ -280,7 +385,7 @@ def render_price_box(ticker):
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 5. واجهة المستخدم
+# 7. واجهة المستخدم
 # ==========================================
 c1, c2, c3 = st.columns([1.5, 1.5, 1])
 with c1: selected_market = st.selectbox("السوق", list(MARKETS.keys()), index=0, label_visibility="collapsed")
@@ -294,7 +399,7 @@ if selected_market == "📊 المؤشرات (Indices)":
 else:
     ticker_symbols = US_TICKERS; custom_ticker = st.text_input("أو اكتب رمز السهم يدوياً (مثال: AAPL, TSLA):", "").strip().upper()
 
-with st.spinner(f"جاري تحديث البيانات..."):
+with st.spinner(f"جاري تحليل البيانات بالمعادلة الذهبية..."):
     eval_data = evaluate_tickers(ticker_symbols, tf_config["interval"], tf_config["period"])
 
 if filter_mode == "إيجابي (فوق المتوسطات) 🚀": filtered_tickers = [t for t in ticker_symbols if eval_data.get(t, {}).get('is_above_mas', False)]
@@ -323,22 +428,20 @@ if selected_ticker:
     quote = get_live_quote(selected_ticker)
 
     if not df.empty and quote:
-        score, is_above_mas, is_below_mas, recommendation, intraday_t, swing_t, stock_sl, breakdown = analyze_stock(df, selected_ticker, quote['live_price'])
+        score, is_uptrend, is_downtrend, recommendation, t1, t2, stop, breakdown = calculate_technical_score(df, selected_ticker, quote['live_price'])
         score_color = "#00c853" if score >= 60 else ("#ff3d00" if score <= 40 else "#ff9800")
 
         tab1, tab2 = st.tabs(["📊 التحليل الفني والتوصيات", "⛓️ سلسلة الخيارات (Options Chain)"])
 
         with tab1:
             df_plot = df.tail(100).copy()
-            df_plot['SMA_20'] = df['Close'].rolling(window=20).mean().tail(100)
-            df_plot['SMA_30'] = df['Close'].rolling(window=30).mean().tail(100)
             df_plot['SMA_50'] = df['Close'].rolling(window=50).mean().tail(100)
+            df_plot['SMA_200'] = df['Close'].rolling(window=200).mean().tail(100) if len(df) >= 200 else df_plot['SMA_50']
 
             fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.8, 0.2])
             fig.add_trace(go.Candlestick(x=df_plot.index, open=df_plot['Open'], high=df_plot['High'], low=df_plot['Low'], close=df_plot['Close'], name="Price", increasing_line_color='#00c853', decreasing_line_color='#ff3d00'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_20'], mode='lines', name='SMA 20', line=dict(color='#ff9800', width=1.2)), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_30'], mode='lines', name='SMA 30', line=dict(color='#2196f3', width=1.2)), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_50'], mode='lines', name='SMA 50', line=dict(color='#9c27b0', width=1.2)), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_50'], mode='lines', name='SMA 50', line=dict(color='#ff9800', width=1.2)), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['SMA_200'], mode='lines', name='SMA 200', line=dict(color='#2196f3', width=1.2)), row=1, col=1)
             colors = ['#00c853' if close >= open else '#ff3d00' for open, close in zip(df_plot['Open'], df_plot['Close'])]
             fig.add_trace(go.Bar(x=df_plot.index, y=df_plot['Volume'], name="Volume", marker_color=colors), row=2, col=1)
             fig.update_layout(template="plotly_dark", paper_bgcolor='#000000', plot_bgcolor='#000000', height=350, autosize=True, margin=dict(l=0, r=0, t=10, b=0), showlegend=False, dragmode=False, hovermode="x unified", xaxis=dict(showgrid=True, gridcolor='#2a2e39', fixedrange=False), yaxis=dict(showgrid=True, gridcolor='#2a2e39', side='right', fixedrange=False))
@@ -347,7 +450,7 @@ if selected_ticker:
 
             st.markdown(f"""
 <div class="side-card live-card" style="border-left-color: {score_color};">
-<div class="card-title">🧠 محرك التحليل ({selected_timeframe})</div>
+<div class="card-title">🧠 محرك التحليل (المعادلة الذهبية)</div>
 <div style="background: {score_color}20; border: 1px solid {score_color}; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 15px;">
 <div style="font-size: 24px; font-weight: bold; color: {score_color};">درجة الثقة: {score}%</div>
 <div style="font-size: 16px; font-weight: bold; color: {score_color}; margin-top: 5px;">{recommendation}</div>
@@ -360,21 +463,23 @@ if selected_ticker:
 <div class="points-details"><b>تفصيل النقاط:</b><br>{breakdown}</div>
 <div style="border-top: 1px solid #2a2e39; margin: 10px 0;"></div>
 <div style="background: {score_color}15; padding: 10px; border-radius: 5px; margin-top: 10px;">
-<div class="rec-item"><span class="rec-label">هدف الجلسة:</span> <span style="color:{score_color}; font-weight:bold;">${intraday_t:.2f}</span></div>
-<div class="rec-item"><span class="rec-label">هدف الانتهاء:</span> <span style="color:{score_color}; font-weight:bold;">${swing_t:.2f}</span></div>
-<div class="rec-item"><span class="rec-label">وقف الخسارة:</span> <span style="color:#ff3d00; font-weight:bold;">${stock_sl:.2f}</span></div>
+<div class="rec-item"><span class="rec-label">الهدف الأول:</span> <span style="color:{score_color}; font-weight:bold;">${t1:.2f}</span></div>
+<div class="rec-item"><span class="rec-label">الهدف الثاني:</span> <span style="color:{score_color}; font-weight:bold;">${t2:.2f}</span></div>
+<div class="rec-item"><span class="rec-label">وقف الخسارة:</span> <span style="color:#ff3d00; font-weight:bold;">${stop:.2f}</span></div>
 </div>
 </div>
 """, unsafe_allow_html=True)
 
-            # 🌟 عرض كارت العقود
-            if selected_ticker.isalpha():
-                options_rec = get_options_recommendation(selected_ticker, quote['live_price'], recommendation)
-                
-                if options_rec == "NO_DATA":
-                    st.markdown('<div class="side-card options-card"><div class="card-title">📄 توصية عقود الخيارات</div><div class="news-item">⚠️ سيرفر ياهو فاينانس مرفضش يجيب بيانات العقود دلوقتي. جرب تضغط Refresh أو اختار سهم تاني.</div></div>', unsafe_allow_html=True)
-                elif options_rec:
-                    st.markdown(f"""
+            options_rec = get_options_recommendation(selected_ticker, quote['live_price'], recommendation)
+            
+            if options_rec == "NOT_US_STOCK":
+                st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">عقود الخيارات متاحة للأسهم الأمريكية فقط.</div></div>', unsafe_allow_html=True)
+            elif options_rec == "NO_DATA":
+                st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">⚠️ سيرفر ياهو فاينانس مرفضش يجيب بيانات العقود دلوقتي. جرب Refresh أو سهم تاني.</div></div>', unsafe_allow_html=True)
+            elif options_rec == "NO_OPTION_FOR_HOLD":
+                st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">التوصية الحالية "احتفاظ"، لا يفضل فتح عقود خيارات الآن.</div></div>', unsafe_allow_html=True)
+            elif options_rec:
+                st.markdown(f"""
 <div class="side-card options-card">
 <div class="card-title">📄 توصية عقود الخيارات (ملخص)</div>
 <div class="rec-item"><span class="rec-label">النوع:</span> <span style="color:#00bcd4; font-weight:bold;">{options_rec['type']}</span></div>
@@ -398,8 +503,6 @@ if selected_ticker:
 </div>
 </div>
 """, unsafe_allow_html=True)
-                else:
-                    st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">لا توجد بيانات عقود متاحة لهذا السهم.</div></div>', unsafe_allow_html=True)
 
             news = fetch_news(selected_ticker)
             news_html = "".join([f"<div class='news-item'>• {n}</div>" for n in news]) if news else "<div class='news-item'>لا توجد أخبار حديثة.</div>"
@@ -412,7 +515,6 @@ if selected_ticker:
             else:
                 try:
                     stock = yf.Ticker(selected_ticker)
-                    # محاولة جلب التواريخ
                     expirations = stock.options
                     if not expirations:
                         time.sleep(1)
