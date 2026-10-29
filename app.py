@@ -9,12 +9,14 @@ import datetime
 import time
 import pytz
 import finnhub
+from curl_cffi import requests as cffi_requests
 
 # ==========================================
-# 1. إعدادات Finnhub API (مفتاحك الخاص)
+# 1. إعدادات Finnhub API والجلسة المتخفية
 # ==========================================
 FINNHUB_API_KEY = "dbgvuopr01qjpoc3igsgdbgvuopr01qjpoc3igt0"
 finnhub_client = finnhub.Client(api_key=FINNHUB_API_KEY)
+session = cffi_requests.Session(impersonate="chrome")
 
 # ==========================================
 # 2. إعدادات الصفحة والتصميم
@@ -59,7 +61,6 @@ div[data-baseweb="select"] input { pointer-events: none !important; user-select:
 </style>
 """, unsafe_allow_html=True)
 
-# تحديث الصفحة كل 60 ثانية للشارت والبيانات التاريخية
 st_autorefresh(interval=60000, limit=None, key="live_refresh")
 
 def get_market_session():
@@ -86,12 +87,12 @@ MARKETS = {"🇺🇸 أمريكي (US)": US_TICKERS, "📊 المؤشرات (Ind
 TIMEFRAMES = {"1m": {"interval": "1m", "period": "7d"}, "5m": {"interval": "5m", "period": "60d"}, "15m": {"interval": "15m", "period": "60d"}, "30m": {"interval": "30m", "period": "60d"}, "1h": {"interval": "60m", "period": "730d"}, "1d": {"interval": "1d", "period": "5y"}}
 
 # ==========================================
-# 4. دوال جلب البيانات (Finnhub للسعر، yfinance للشارت)
+# 4. دوال جلب البيانات
 # ==========================================
 @st.cache_data(ttl=60)
 def fetch_data(ticker, interval, period):
     try:
-        df = yf.Ticker(ticker).history(period=period, interval=interval, auto_adjust=True)
+        df = yf.Ticker(ticker, session=session).history(period=period, interval=interval, auto_adjust=True)
         if df.empty:
             df = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
             if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
@@ -100,31 +101,32 @@ def fetch_data(ticker, interval, period):
 
 @st.cache_data(ttl=5)
 def get_live_quote(ticker):
-    # 1. Finnhub للسعر اللحظي
     try:
         quote = finnhub_client.quote(ticker)
         if quote['c'] != 0 and quote['pc'] != 0:
-            session = get_market_session()
+            session_type = get_market_session()
             pre_price = None; pre_change = None; pre_change_pct = None
             
-            # جلب البري ماركت من yfinance لو السوق مقفول
-            if session in ["PRE", "CLOSED"]:
+            # جلب البري ماركت من ياهو باستخدام الشموع (أكثر استقراراً من info)
+            if session_type in ["PRE", "CLOSED"]:
                 try:
-                    t = yf.Ticker(ticker)
-                    temp_pre = t.info.get('preMarketPrice')
-                    if temp_pre:
-                        pre_price = temp_pre
-                        pre_change = pre_price - quote['pc']
-                        pre_change_pct = (pre_change / quote['pc']) * 100
+                    t = yf.Ticker(ticker, session=session)
+                    df_m = t.history(period="1d", interval="1m", prepost=True)
+                    if not df_m.empty:
+                        df_m.index = df_m.index.tz_convert('America/New_York')
+                        pre_df = df_m[df_m.index.time < datetime.time(9, 30)]
+                        if not pre_df.empty:
+                            pre_price = pre_df['Close'].iloc[-1]
+                            pre_change = pre_price - quote['pc']
+                            pre_change_pct = (pre_change / quote['pc']) * 100
                 except: pass
 
-            return {"live_price": quote['c'], "live_change": quote['d'], "live_change_pct": quote['dp'], "pre_price": pre_price, "pre_change": pre_change, "pre_change_pct": pre_change_pct, "session": session}
-    except:
-        pass # لو فين هب فشل، نروح للياهو
+            return {"live_price": quote['c'], "live_change": quote['d'], "live_change_pct": quote['dp'], "pre_price": pre_price, "pre_change": pre_change, "pre_change_pct": pre_change_pct, "session": session_type}
+    except: pass
 
-    # 2. yfinance كاحتياطي
+    # احتياطي لو فين هب وقع
     try:
-        t = yf.Ticker(ticker)
+        t = yf.Ticker(ticker, session=session)
         fi = t.fast_info
         live_price = fi.last_price
         prev_close = fi.previous_close
@@ -133,47 +135,46 @@ def get_live_quote(ticker):
 
         live_change = live_price - prev_close
         live_change_pct = (live_change / prev_close) * 100
-        session = get_market_session()
+        session_type = get_market_session()
         
         pre_price = None; pre_change = None; pre_change_pct = None
-        if session in ["PRE", "CLOSED"]:
+        if session_type in ["PRE", "CLOSED"]:
             try:
-                info = t.info
-                temp_pre = info.get('preMarketPrice')
-                if temp_pre:
-                    pre_price = temp_pre
-                    pre_change = pre_price - prev_close
-                    pre_change_pct = (pre_change / prev_close) * 100
+                df_m = t.history(period="1d", interval="1m", prepost=True)
+                if not df_m.empty:
+                    df_m.index = df_m.index.tz_convert('America/New_York')
+                    pre_df = df_m[df_m.index.time < datetime.time(9, 30)]
+                    if not pre_df.empty:
+                        pre_price = pre_df['Close'].iloc[-1]
+                        pre_change = pre_price - prev_close
+                        pre_change_pct = (pre_change / prev_close) * 100
             except: pass
 
-        return {"live_price": live_price, "live_change": live_change, "live_change_pct": live_change_pct, "pre_price": pre_price, "pre_change": pre_change, "pre_change_pct": pre_change_pct, "session": session}
+        return {"live_price": live_price, "live_change": live_change, "live_change_pct": live_change_pct, "pre_price": pre_price, "pre_change": pre_change, "pre_change_pct": pre_change_pct, "session": session_type}
     except: return None
 
 @st.cache_data(ttl=300)
 def fetch_news(ticker):
     try:
-        news = yf.Ticker(ticker).news
+        news = yf.Ticker(ticker, session=session).news
         return [n['title'] for n in news[:3]] if news else []
     except: return []
 
 # ==========================================
-# 5. محرك التحليل الفني (المعادلة الذهبية)
+# 5. محرك التحليل الفني
 # ==========================================
 def calculate_technical_score(df, ticker, live_price):
     if df.empty or len(df) < 50 or not live_price: return 50, False, False, "بيانات غير كافية", 0, 0, 0, "لا توجد بيانات"
     close, high, low, volume = df['Close'], df['High'], df['Low'], df['Volume']
     
-    # ATR
     tr = pd.concat([high - low, (high - close.shift()).abs(), (low - close.shift()).abs()], axis=1).max(axis=1)
     atr = tr.rolling(14).mean().iloc[-1]
     
-    # Trend (SMA 50 & 200)
     sma50 = close.rolling(50).mean().iloc[-1]
     sma200 = close.rolling(200).mean().iloc[-1] if len(close) >= 200 else sma50
     is_uptrend = (live_price > sma50) and (sma50 > sma200)
     is_downtrend = (live_price < sma50) and (sma50 < sma200)
     
-    # Momentum (RSI, MACD, Stochastic, Williams %R)
     delta = close.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -190,20 +191,17 @@ def calculate_technical_score(df, ticker, live_price):
     stoch_bullish = stoch_k > stoch_d and stoch_k < 80
     williams_r = -100 * ((highest_high - close) / (highest_high - lowest_low)).iloc[-1]
     
-    # Volume (OBV)
     avg_vol = volume.rolling(20).mean().iloc[-1]
     vol_spike = volume.iloc[-1] > (avg_vol * 1.5)
     obv = (np.sign(close.diff()) * volume).fillna(0).cumsum()
     obv_uptrend = obv.iloc[-1] > obv.rolling(20).mean().iloc[-1]
     
-    # Bollinger Bands
     bb_middle = close.rolling(window=20).mean()
     bb_std = close.rolling(window=20).std()
     bb_upper = bb_middle + (bb_std * 2)
     bb_lower = bb_middle - (bb_std * 2)
     near_lower_bb = live_price <= bb_lower.iloc[-1]
 
-    # Scoring
     score = 50
     breakdown = []
     
@@ -253,32 +251,31 @@ def evaluate_tickers(tickers, interval, period):
             if len(df) < 50 or not quote: continue
             score, is_uptrend, is_downtrend, rec, _, _, _, _ = calculate_technical_score(df, t, quote['live_price'])
             results[t] = {'score': score, 'is_above_mas': is_uptrend, 'is_below_mas': is_downtrend, 'rec': rec}
-            time.sleep(0.1) # تأخير بسيط لتجنب الحظر
+            time.sleep(0.1)
         except: pass
     return results
 
 # ==========================================
-# 6. دالة جلب عقود الخيارات
+# 6. دالة جلب عقود الخيارات (كاش أطول + محاولات)
 # ==========================================
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=900) # 🌟 كاش 15 دقيقة عشان نمنع الاختفاء المتكرر
 def get_option_chain_fallback(ticker):
     if not ticker.isalpha(): return None, "NOT_US_STOCK"
 
-    # yfinance مع 3 محاولات
-    for attempt in range(3):
+    for attempt in range(5):
         try:
-            stock = yf.Ticker(ticker)
+            stock = yf.Ticker(ticker, session=session)
             expirations = stock.options
             if expirations:
                 chain = stock.option_chain(expirations[0])
                 if not chain.calls.empty and not chain.puts.empty:
                     return {"calls": chain.calls, "puts": chain.puts, "expiration": expirations[0]}, "yfinance"
-            time.sleep(1)
-        except: time.sleep(1)
+            time.sleep(2) # استنى شوية أطول عشان نقلل الحظر
+        except: time.sleep(2)
 
     return None, "NO_DATA"
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=900)
 def get_options_recommendation(ticker, current_price, general_rec):
     if not ticker.isalpha(): return "NOT_US_STOCK"
 
@@ -322,7 +319,7 @@ def get_options_recommendation(ticker, current_price, general_rec):
     except: return "NO_DATA"
 
 # ==========================================
-# 7. تحديث السعر كل ثانيتين (Fragment)
+# 7. تحديث السعر
 # ==========================================
 @st.fragment(run_every="2s")
 def render_price_box(ticker):
@@ -331,13 +328,13 @@ def render_price_box(ticker):
         live_price = quote.get('live_price')
         live_change = quote.get('live_change', 0)
         live_change_pct = quote.get('live_change_pct', 0)
-        session = quote.get('session', 'CLOSED')
+        session_type = quote.get('session', 'CLOSED')
         
         main_color = "#00c853" if live_change >= 0 else "#ff3d00"
         main_sign = "+" if live_change >= 0 else ""
 
         pre_html = ""
-        if quote.get('pre_price') and session != "REGULAR":
+        if quote.get('pre_price') and session_type != "REGULAR":
             pre_color = "#00c853" if quote.get('pre_change', 0) >= 0 else "#ff3d00"
             pre_sign = "+" if quote.get('pre_change', 0) >= 0 else ""
             pre_html = f"""
@@ -345,7 +342,7 @@ def render_price_box(ticker):
 <p class="tv-pre-price">{quote.get('pre_price'):.2f} <span class="tv-currency">USD</span></p>
 <p class="tv-pre-change" style="color: {pre_color};">{pre_sign}{quote.get('pre_change', 0):.2f} ({pre_sign}{quote.get('pre_change_pct', 0):.2f}%)</p>
 """
-        elif session == "REGULAR":
+        elif session_type == "REGULAR":
              pre_html = f"""<p class="tv-pre-label" style="color:#00c853;">🟢 السوق مفتوح (Regular Session)</p>"""
 
         st.markdown(f"""
@@ -371,7 +368,7 @@ if selected_market == "📊 المؤشرات (Indices)":
 else:
     ticker_symbols = US_TICKERS; custom_ticker = st.text_input("أو اكتب رمز السهم يدوياً (مثال: AAPL, TSLA):", "").strip().upper()
 
-with st.spinner(f"جاري تحليل البيانات بالمعادلة الذهبية..."):
+with st.spinner(f"جاري تحليل البيانات..."):
     eval_data = evaluate_tickers(ticker_symbols, tf_config["interval"], tf_config["period"])
 
 if filter_mode == "إيجابي (فوق المتوسطات) 🚀": filtered_tickers = [t for t in ticker_symbols if eval_data.get(t, {}).get('is_above_mas', False)]
@@ -422,7 +419,7 @@ if selected_ticker:
 
             st.markdown(f"""
 <div class="side-card live-card" style="border-left-color: {score_color};">
-<div class="card-title">🧠 محرك التحليل (المعادلة الذهبية)</div>
+<div class="card-title">🧠 محرك التحليل</div>
 <div style="background: {score_color}20; border: 1px solid {score_color}; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 15px;">
 <div style="font-size: 24px; font-weight: bold; color: {score_color};">درجة الثقة: {score}%</div>
 <div style="font-size: 16px; font-weight: bold; color: {score_color}; margin-top: 5px;">{recommendation}</div>
@@ -447,31 +444,26 @@ if selected_ticker:
             if options_rec == "NOT_US_STOCK":
                 st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">عقود الخيارات متاحة للأسهم الأمريكية فقط.</div></div>', unsafe_allow_html=True)
             elif options_rec == "NO_DATA":
-                st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">⚠️ ياهو فاينانس مرفضش يجيب البيانات دلوقتي. جرب سهم تاني أو أعد المحاولة بعد شوية (مشكلة من السيرفر).</div></div>', unsafe_allow_html=True)
+                st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">⚠️ ياهو حظر الـ IP بتاع السيرفر. جرب سهم تاني أو استنى دقيقة.</div></div>', unsafe_allow_html=True)
             elif options_rec == "NO_OPTION_FOR_HOLD":
-                st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">التوصية الحالية "احتفاظ"، لا يفضل فتح عقود خيارات الآن.</div></div>', unsafe_allow_html=True)
+                st.markdown('<div class="side-card options-card"><div class="card-title">📄 عقود الخيارات</div><div class="news-item">التوصية "احتفاظ"، مش وقت دخول عقود.</div></div>', unsafe_allow_html=True)
             elif options_rec:
                 st.markdown(f"""
 <div class="side-card options-card">
-<div class="card-title">📄 توصية عقود الخيارات (المصدر: {options_rec.get('source', 'N/A')})</div>
+<div class="card-title">📄 عقود الخيارات</div>
 <div class="rec-item"><span class="rec-label">النوع:</span> <span style="color:#00bcd4; font-weight:bold;">{options_rec['type']}</span></div>
-<div class="rec-item"><span class="rec-label">تاريخ الانتهاء:</span> <span>{options_rec['expiration']}</span></div>
+<div class="rec-item"><span class="rec-label">الانتهاء:</span> <span>{options_rec['expiration']}</span></div>
 <div class="rec-item"><span class="rec-label">Strike:</span> <span>${options_rec['strike']:.2f}</span></div>
-<div class="rec-item"><span class="rec-label">سعر العقد:</span> <span style="color:#fff; font-weight:bold;">${options_rec['last_price']:.2f}</span></div>
+<div class="rec-item"><span class="rec-label">السعر:</span> <span style="color:#fff; font-weight:bold;">${options_rec['last_price']:.2f}</span></div>
 <div style="border-top: 1px dashed #2a2e39; margin: 8px 0;"></div>
-<div class="rec-item"><span class="rec-label">هدف الجلسة (+30%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['session_target']:.2f}</span></div>
-<div class="rec-item"><span class="rec-label">هدف الانتهاء (+100%):</span> <span style="color:#00c853; font-weight:bold;">${options_rec['expiry_target']:.2f}</span></div>
-<div class="rec-item"><span class="rec-label">وقف الخسارة (-20%):</span> <span style="color:#ff3d00; font-weight:bold;">${options_rec['stop_loss']:.2f}</span></div>
-
+<div class="rec-item"><span class="rec-label">هدف الجلسة:</span> <span style="color:#00c853; font-weight:bold;">${options_rec['session_target']:.2f}</span></div>
+<div class="rec-item"><span class="rec-label">هدف الانتهاء:</span> <span style="color:#00c853; font-weight:bold;">${options_rec['expiry_target']:.2f}</span></div>
+<div class="rec-item"><span class="rec-label">وقف الخسارة:</span> <span style="color:#ff3d00; font-weight:bold;">${options_rec['stop_loss']:.2f}</span></div>
 <div class="greeks-grid">
-<div class="greeks-item"><span class="greeks-label">الحجم:</span> <span class="greeks-value">{options_rec['volume']}</span></div>
+<div class="greeks-item"><span class="greeks-label">Volume:</span> <span class="greeks-value">{options_rec['volume']}</span></div>
 <div class="greeks-item"><span class="greeks-label">OI:</span> <span class="greeks-value">{options_rec['oi']}</span></div>
 <div class="greeks-item"><span class="greeks-label">IV:</span> <span class="greeks-value">{options_rec['iv']:.2f}%</span></div>
 <div class="greeks-item"><span class="greeks-label">Delta:</span> <span class="greeks-value">{options_rec['delta']:.3f}</span></div>
-<div class="greeks-item"><span class="greeks-label">Gamma:</span> <span class="greeks-value">{options_rec['gamma']:.3f}</span></div>
-<div class="greeks-item"><span class="greeks-label">Theta:</span> <span class="greeks-value">{options_rec['theta']:.3f}</span></div>
-<div class="greeks-item"><span class="greeks-label">Vega:</span> <span class="greeks-value">{options_rec['vega']:.3f}</span></div>
-<div class="greeks-item"><span class="greeks-label">Rho:</span> <span class="greeks-value">{options_rec['rho']:.3f}</span></div>
 </div>
 </div>
 """, unsafe_allow_html=True)
@@ -485,7 +477,7 @@ if selected_ticker:
             chain_data, source = get_option_chain_fallback(selected_ticker)
             
             if chain_data is None:
-                st.warning("لا توجد خيارات متاحة لهذا السهم حالياً (ياهو فاينانس مرفض). جرب سهم آخر.")
+                st.warning("لا توجد خيارات متاحة. ياهو حظر السيرفر. جرب سهم آخر.")
             else:
                 calls = chain_data['calls']; puts = chain_data['puts']; expiration = chain_data['expiration']
                 st.info(f"المصدر: {source} | تاريخ الانتهاء: {expiration}")
